@@ -1,0 +1,546 @@
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  desktopCapturer,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  nativeImage,
+  Notification,
+  powerMonitor,
+  session,
+  shell,
+  Tray,
+} from 'electron'
+import electronUpdater, { type ProgressInfo, type UpdateInfo } from 'electron-updater'
+import log from 'electron-log'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { registerLocalMediaScheme, setupLocalMedia } from './local-media'
+
+const { autoUpdater } = electronUpdater
+autoUpdater.logger = log
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = true
+log.transports.file.level = 'info'
+
+function decodeXmlEntities(text: string): string {
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+}
+
+function serializarUpdateInfo(info: UpdateInfo) {
+  const notas = info.releaseNotes
+  const releaseNotes =
+    typeof notas === 'string'
+      ? decodeXmlEntities(notas)
+      : Array.isArray(notas)
+        ? notas.map((n) => `<h3>v${n.version}</h3>${decodeXmlEntities(n.note ?? '')}`).join('')
+        : ''
+
+  return {
+    version: info.version,
+    releaseDate: info.releaseDate,
+    releaseNotes,
+  }
+}
+
+app.commandLine.appendSwitch('disable-features', 'MediaFoundationVideoCapture')
+
+registerLocalMediaScheme()
+
+process.on('uncaughtException', (err) => {
+  log.error('uncaughtException en el proceso principal', err)
+  app.exit(1)
+})
+
+process.on('unhandledRejection', (reason) => {
+  log.error('unhandledRejection en el proceso principal', reason)
+})
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+process.env.APP_ROOT = path.join(__dirname, '..')
+export const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
+export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
+
+const PUBLIC_DIR = VITE_DEV_SERVER_URL
+  ? path.join(process.env.APP_ROOT, 'public')
+  : RENDERER_DIST
+const WINDOW_ICON = path.join(PUBLIC_DIR, 'favicon.png')
+const TRAY_ICON = path.join(PUBLIC_DIR, 'zion-tray.png')
+
+const PROTOCOLO = 'zion'
+
+const initialDeepLink =
+  process.argv.find((arg) => arg.startsWith(`${PROTOCOLO}://`)) ?? null
+
+let win: BrowserWindow | null = null
+let tray: Tray | null = null
+
+let allowClose = false
+let quitAndInstallPending = false
+let isQuitting = false
+let pendingScreenSourceId: string | null = null
+let pendingScreenAudio = false
+let notificationSeq = 0
+
+let devToolsUnlocked = Boolean(VITE_DEV_SERVER_URL)
+
+async function verificarAdminPlataforma(
+  supabaseUrl: string,
+  anonKey: string,
+  accessToken: string
+): Promise<boolean> {
+  try {
+    if (!supabaseUrl || !anonKey || !accessToken) return false
+    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/soy_admin_plataforma`, {
+      method: 'POST',
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    })
+    if (!response.ok) return false
+    const data = await response.json().catch(() => null)
+    return data === true
+  } catch (err) {
+    log.error('No se pudo verificar el administrador de plataforma', err)
+    return false
+  }
+}
+
+function requestQuit() {
+  isQuitting = true
+  win?.close()
+}
+function createWindow() {
+  win = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    minWidth: 1000,
+    minHeight: 600,
+    autoHideMenuBar: true,
+    icon: WINDOW_ICON,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+
+  win.once('ready-to-show', () => {
+    win?.show()
+  })
+
+  win.webContents.on('devtools-opened', () => {
+    if (!devToolsUnlocked) win?.webContents.closeDevTools()
+  })
+
+  win.webContents.on('before-input-event', (event, input) => {
+    if (devToolsUnlocked) return
+    const key = input.key?.toLowerCase()
+    const esToggleDevTools =
+      key === 'f12' ||
+      ((input.control || input.meta) && input.shift && (key === 'i' || key === 'j' || key === 'c'))
+    if (esToggleDevTools) event.preventDefault()
+  })
+
+  win.on('close', (event) => {
+    if (allowClose || !win) return
+
+    if (quitAndInstallPending) {
+      allowClose = true
+      return
+    }
+
+    if (!isQuitting && tray) {
+      event.preventDefault()
+      win.webContents.send('zion-window-hidden')
+      win.hide()
+      return
+    }
+
+    event.preventDefault()
+
+    const finishClosing = () => {
+      clearTimeout(timeout)
+      ipcMain.removeListener('zion-ready-to-quit', finishClosing)
+      allowClose = true
+      win?.close()
+    }
+
+    const timeout = setTimeout(finishClosing, 3000)
+    ipcMain.once('zion-ready-to-quit', finishClosing)
+    win.webContents.send('zion-before-quit')
+  })
+
+  if (VITE_DEV_SERVER_URL) {
+    win.loadURL(VITE_DEV_SERVER_URL)
+  } else {
+    win.loadFile(path.join(RENDERER_DIST, 'index.html'))
+  }
+}
+
+function aplicarMenu() {
+  const viewSubmenu: Electron.MenuItemConstructorOptions[] = [
+    { role: 'reload' },
+    { role: 'forceReload' },
+    { type: 'separator' },
+    { role: 'resetZoom' },
+    { role: 'zoomIn' },
+    { role: 'zoomOut' },
+    { type: 'separator' },
+    { role: 'togglefullscreen' },
+  ]
+  if (devToolsUnlocked) {
+    viewSubmenu.push({ type: 'separator' }, { role: 'toggleDevTools' })
+  }
+
+  const menu = Menu.buildFromTemplate([
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
+    { role: 'editMenu' },
+    { label: 'Ver', submenu: viewSubmenu },
+  ])
+  Menu.setApplicationMenu(menu)
+}
+aplicarMenu()
+
+const gotLock = app.requestSingleInstanceLock()
+
+if (!gotLock) {
+  log.warn('Otra instancia de Zion ya tiene el lock — cerrando esta sin abrir ventana.')
+  app.quit()
+} else {
+  app.on('second-instance', (_event, argv) => {
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.focus()
+    }
+    const url = argv.find((arg) => arg.startsWith(`${PROTOCOLO}://`))
+    if (url) win?.webContents.send('zion-deep-link', url)
+  })
+
+  app.on('open-url', (event, url) => {
+    event.preventDefault()
+    win?.webContents.send('zion-deep-link', url)
+  })
+
+  ipcMain.handle('zion:get-initial-deep-link', () => initialDeepLink)
+
+  ipcMain.on('zion-renderer-error', (_event, info: { message: string; stack?: string; context?: string }) => {
+    log.error('Error en el renderer', info)
+  })
+
+  ipcMain.on('zion:open-external', (_event, url: string) => {
+    if (URL.canParse(url) && new URL(url).protocol === 'https:') {
+      shell.openExternal(url)
+    }
+  })
+
+  ipcMain.handle('zion:write-clipboard', (_event, text: string) => {
+    clipboard.writeText(text)
+  })
+
+  ipcMain.handle('zion:write-clipboard-image', (_event, dataUrl: string) => {
+    const image = nativeImage.createFromDataURL(dataUrl)
+    if (!image.isEmpty()) clipboard.writeImage(image)
+  })
+
+  ipcMain.handle(
+    'zion:unlock-inspect',
+    async (
+      _event,
+      payload: { supabaseUrl: string; anonKey: string; accessToken: string }
+    ): Promise<boolean> => {
+      if (devToolsUnlocked) {
+        win?.webContents.openDevTools({ mode: 'detach' })
+        return true
+      }
+      const permitido = await verificarAdminPlataforma(
+        payload?.supabaseUrl,
+        payload?.anonKey,
+        payload?.accessToken
+      )
+      if (!permitido) return false
+      devToolsUnlocked = true
+      aplicarMenu()
+      win?.webContents.openDevTools({ mode: 'detach' })
+      return true
+    }
+  )
+
+  ipcMain.handle('zion:is-window-focused', () => win?.isFocused() ?? false)
+
+  ipcMain.handle('zion:get-start-on-login', () => app.getLoginItemSettings().openAtLogin)
+
+  ipcMain.on('zion:set-start-on-login', (_event, enabled: boolean) => {
+    app.setLoginItemSettings({ openAtLogin: enabled })
+  })
+
+  ipcMain.on(
+    'zion:set-badge-count',
+    (_event, count: number, overlayIconDataUrl: string | null) => {
+      if (process.platform === 'linux') {
+        app.setBadgeCount(count)
+        return
+      }
+      if (process.platform === 'darwin') {
+        app.dock?.setBadge(count > 0 ? String(count) : '')
+        return
+      }
+      if (process.platform === 'win32' && win) {
+        if (count > 0 && overlayIconDataUrl) {
+          win.setOverlayIcon(nativeImage.createFromDataURL(overlayIconDataUrl), `${count} no leídos`)
+        } else {
+          win.setOverlayIcon(null, '')
+        }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'zion:show-notification',
+    (_event, payload: { title: string; body?: string }) => {
+      const id = ++notificationSeq
+      if (!Notification.isSupported()) return id
+
+      const notification = new Notification({
+        title: payload.title,
+        body: payload.body,
+      })
+      notification.on('click', () => {
+        win?.show()
+        win?.focus()
+        win?.webContents.send('zion-notification-clicked', id)
+      })
+      notification.show()
+      return id
+    }
+  )
+
+  ipcMain.handle('zion:check-for-updates', async () => {
+    if (!app.isPackaged) return null
+    try {
+      const resultado = await autoUpdater.checkForUpdates()
+      return resultado?.isUpdateAvailable ? serializarUpdateInfo(resultado.updateInfo) : null
+    } catch (err) {
+      log.error('No se pudo verificar actualizaciones', err)
+      return null
+    }
+  })
+
+  ipcMain.handle('zion:list-screen-sources', async () => {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: { width: 320, height: 180 },
+      fetchWindowIcons: true,
+    })
+    return sources.map((source) => ({
+      id: source.id,
+      name: source.name,
+      thumbnailDataUrl: source.thumbnail.toDataURL(),
+    }))
+  })
+
+  ipcMain.on('zion:select-screen-source', (_event, sourceId: string, includeAudio: boolean) => {
+    pendingScreenSourceId = sourceId
+    pendingScreenAudio = includeAudio
+  })
+
+  ipcMain.on('zion:download-update', () => {
+    autoUpdater.downloadUpdate().catch((err) => {
+      log.error('No se pudo descargar la actualización', err)
+    })
+  })
+
+  ipcMain.on('zion:install-update', () => {
+    quitAndInstallPending = true
+    autoUpdater.quitAndInstall(true, true)
+  })
+
+  ipcMain.handle('zion:clear-cache', async () => {
+    await session.defaultSession.clearCache()
+    await session.defaultSession.clearStorageData({
+      storages: ['cachestorage', 'serviceworkers'],
+    })
+  })
+
+  ipcMain.on('zion:open-user-data-folder', () => {
+    shell.openPath(app.getPath('userData')).catch((err) => {
+      log.error('No se pudo abrir la carpeta de datos', err)
+    })
+  })
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit()
+      win = null
+    }
+  })
+
+  app.on('before-quit', () => {
+    isQuitting = true
+    globalShortcut.unregisterAll()
+  })
+
+  async function createTray() {
+    let icon = nativeImage.createFromPath(TRAY_ICON)
+    if (icon.isEmpty()) {
+      icon = await app.getFileIcon(process.execPath)
+    }
+    tray = new Tray(icon)
+    tray.setToolTip('Zion')
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        {
+          label: 'Abrir Zion',
+          click: () => {
+            win?.show()
+            win?.focus()
+          },
+        },
+        { type: 'separator' },
+        { label: 'Salir', click: () => requestQuit() },
+      ])
+    )
+    tray.on('double-click', () => {
+      win?.show()
+      win?.focus()
+    })
+  }
+
+  app.whenReady().then(() => {
+    log.info('App lista, version', app.getVersion())
+
+    try {
+      setupLocalMedia()
+    } catch (err) {
+      log.error('No se pudo inicializar el almacén local de multimedia', err)
+    }
+
+    session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+      callback(permission === 'media')
+    })
+
+    session.defaultSession.setDisplayMediaRequestHandler(
+      (_request, callback) => {
+        if (!pendingScreenSourceId) {
+          callback({})
+          return
+        }
+        const sourceId = pendingScreenSourceId
+        const withAudio = pendingScreenAudio
+        pendingScreenSourceId = null
+        pendingScreenAudio = false
+
+        desktopCapturer
+          .getSources({ types: ['screen', 'window'] })
+          .then((sources) => {
+            const source = sources.find((s) => s.id === sourceId)
+            if (!source) {
+              callback({})
+              return
+            }
+            callback({
+              video: source,
+              audio: withAudio ? 'loopback' : undefined,
+            })
+          })
+          .catch((err) => {
+            log.error('No se pudo resolver la fuente de pantalla compartida', err)
+            callback({})
+          })
+      },
+      { useSystemPicker: false }
+    )
+
+    if (!app.isDefaultProtocolClient(PROTOCOLO)) {
+      if (VITE_DEV_SERVER_URL) {
+        app.setAsDefaultProtocolClient(PROTOCOLO, process.execPath, [
+          path.resolve(process.argv[1]),
+        ])
+      } else {
+        app.setAsDefaultProtocolClient(PROTOCOLO)
+      }
+    }
+
+    createWindow()
+    log.info('Ventana principal creada')
+
+    createTray().catch((err) => {
+      log.error('No se pudo crear el ícono de la bandeja', err)
+    })
+
+    globalShortcut.register('CommandOrControl+Shift+M', () => {
+      win?.webContents.send('zion-toggle-mute')
+    })
+    globalShortcut.register('CommandOrControl+Shift+D', () => {
+      win?.webContents.send('zion-toggle-deafen')
+    })
+
+    const IDLE_THRESHOLD_SECONDS = 5 * 60
+    let isIdle = false
+    setInterval(() => {
+      const shouldBeIdle = powerMonitor.getSystemIdleTime() >= IDLE_THRESHOLD_SECONDS
+      if (shouldBeIdle === isIdle) return
+      isIdle = shouldBeIdle
+      win?.webContents.send(shouldBeIdle ? 'zion-idle' : 'zion-active')
+    }, 30_000)
+
+    win?.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      log.error('La ventana falló al cargar', { errorCode, errorDescription })
+    })
+
+    win?.webContents.on('render-process-gone', (_event, details) => {
+      log.error('El proceso de renderizado terminó inesperadamente', details)
+    })
+
+    if (app.isPackaged) {
+      win?.once('ready-to-show', () => {
+        autoUpdater.checkForUpdates().catch((err) => {
+          log.error('No se pudo verificar actualizaciones', err)
+        })
+      })
+
+      setInterval(
+        () => {
+          autoUpdater.checkForUpdates().catch((err) => {
+            log.error('No se pudo verificar actualizaciones', err)
+          })
+        },
+        4 * 60 * 60 * 1000
+      )
+    }
+  })
+}
+
+autoUpdater.on('update-available', (info: UpdateInfo) => {
+  win?.webContents.send('zion-update-available', serializarUpdateInfo(info))
+})
+
+autoUpdater.on('download-progress', (progress: ProgressInfo) => {
+  win?.webContents.send('zion-update-progress', {
+    percent: progress.percent,
+    bytesPerSecond: progress.bytesPerSecond,
+    transferred: progress.transferred,
+    total: progress.total,
+  })
+})
+
+autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+  win?.webContents.send('zion-update-downloaded', serializarUpdateInfo(info))
+})
+
+autoUpdater.on('error', (err) => {
+  log.error('Error en el auto-updater', err)
+  win?.webContents.send('zion-update-error', err.message)
+})

@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      created: ${{ steps.tag.outputs.created }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Crear y pushear el tag de versión
+        id: tag
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v${VERSION}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "El tag $TAG ya existe en el remoto, no hace falta crearlo ni recompilar."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+            echo "created=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Crear el borrador de release para que electron-builder lo reutilice
+        if: steps.tag.outputs.created == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Ya existe una release para $TAG, electron-builder la reutilizará."
+          else
+            gh release create "$TAG" --draft --title "$TAG" --notes ""
+          fi
+
+  build:
+    needs: tag
+    if: needs.tag.outputs.created == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag.outputs.tag }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build y publicar en GitHub Releases
+        run: npm run publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Publicar la release (sacarla de estado borrador)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.tag.outputs.tag }}"
+          gh release edit "$TAG" --draft=false
+
+      - name: Verificar que la release publicada tenga los artefactos completos
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.tag.outputs.tag }}"
+          ASSETS=$(gh release view "$TAG" --json assets -q '[.assets[].name] | join(", ")')
+          echo "Assets publicados en $TAG: $ASSETS"
+          if ! echo "$ASSETS" | grep -q "latest.yml"; then
+            echo "::error::La release $TAG no tiene latest.yml adjunto — electron-updater no podrá detectar esta versión. Publicación incompleta, revisar manualmente en GitHub Releases."
+            exit 1
+          fi
+          if ! echo "$ASSETS" | grep -q "\.exe"; then
+            echo "::error::La release $TAG no tiene el instalador .exe adjunto. Publicación incompleta, revisar manualmente en GitHub Releases."
+            exit 1
+          fi
