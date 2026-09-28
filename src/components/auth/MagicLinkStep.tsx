@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { getErrorMessage } from '@/lib/utils'
 import { getRateLimitSeconds } from '@/lib/rate-limit'
 import { useCooldown } from '@/hooks/use-cooldown'
-import { AUTH_CALLBACK_URL } from '@/lib/auth-deep-links'
+import { createAuthCallbackUrl } from '@/lib/auth-deep-links'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -27,7 +27,7 @@ export function MagicLinkStep({ onBack }: { onBack: () => void }) {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: { emailRedirectTo: AUTH_CALLBACK_URL },
+        options: { emailRedirectTo: createAuthCallbackUrl() },
       })
       if (error) throw error
       setStep('verify')

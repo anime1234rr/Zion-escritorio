@@ -15,6 +15,8 @@ import {
 } from 'electron'
 import electronUpdater, { type ProgressInfo, type UpdateInfo } from 'electron-updater'
 import log from 'electron-log'
+import { access, mkdir, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { registerLocalMediaScheme, setupLocalMedia } from './local-media'
@@ -115,6 +117,40 @@ async function verificarAdminPlataforma(
     log.error('No se pudo verificar el administrador de plataforma', err)
     return false
   }
+}
+
+const LINUX_AUTOSTART_DIR = path.join(os.homedir(), '.config', 'autostart')
+const LINUX_AUTOSTART_FILE = path.join(LINUX_AUTOSTART_DIR, 'com.lunayanet.zion.desktop')
+
+function getLinuxExecCommand(): string {
+  const appImagePath = process.env.APPIMAGE
+  return `"${appImagePath ?? process.execPath}"`
+}
+
+async function getStartOnLoginLinux(): Promise<boolean> {
+  try {
+    await access(LINUX_AUTOSTART_FILE)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function setStartOnLoginLinux(enabled: boolean): Promise<void> {
+  if (!enabled) {
+    await rm(LINUX_AUTOSTART_FILE, { force: true })
+    return
+  }
+  await mkdir(LINUX_AUTOSTART_DIR, { recursive: true })
+  const contenido = [
+    '[Desktop Entry]',
+    'Type=Application',
+    'Name=Zion',
+    `Exec=${getLinuxExecCommand()}`,
+    'X-GNOME-Autostart-enabled=true',
+    '',
+  ].join('\n')
+  await writeFile(LINUX_AUTOSTART_FILE, contenido, 'utf-8')
 }
 
 function requestQuit() {
@@ -280,9 +316,18 @@ if (!gotLock) {
 
   ipcMain.handle('zion:is-window-focused', () => win?.isFocused() ?? false)
 
-  ipcMain.handle('zion:get-start-on-login', () => app.getLoginItemSettings().openAtLogin)
+  ipcMain.handle('zion:get-start-on-login', () => {
+    if (process.platform === 'linux') return getStartOnLoginLinux()
+    return app.getLoginItemSettings().openAtLogin
+  })
 
   ipcMain.on('zion:set-start-on-login', (_event, enabled: boolean) => {
+    if (process.platform === 'linux') {
+      setStartOnLoginLinux(enabled).catch((err) => {
+        log.error('No se pudo actualizar el autoarranque de Linux', err)
+      })
+      return
+    }
     app.setLoginItemSettings({ openAtLogin: enabled })
   })
 

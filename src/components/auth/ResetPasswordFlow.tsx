@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { getErrorMessage } from '@/lib/utils'
 import { getRateLimitSeconds } from '@/lib/rate-limit'
 import { useCooldown } from '@/hooks/use-cooldown'
-import { AUTH_CALLBACK_URL } from '@/lib/auth-deep-links'
+import { createAuthCallbackUrl } from '@/lib/auth-deep-links'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -32,7 +32,7 @@ export function ResetPasswordFlow({ onBack }: { onBack: () => void }) {
     setLoading(true)
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: AUTH_CALLBACK_URL,
+        redirectTo: createAuthCallbackUrl(),
       })
       if (error) throw error
       setStep('confirm')

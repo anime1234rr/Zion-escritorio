@@ -1,4 +1,5 @@
 import { Download, Loader2, RefreshCw, Sparkles, TriangleAlert } from 'lucide-react'
+import DOMPurify, { type Config } from 'dompurify'
 
 import { cn } from '@/lib/utils'
 import { useAppUpdate } from '@/hooks/use-app-update'
@@ -13,6 +14,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+
+const RELEASE_NOTES_SANITIZE_CONFIG: Config = {
+  ALLOWED_TAGS: ['h1', 'h2', 'h3', 'p', 'ul', 'ol', 'li', 'strong', 'em', 'code', 'a', 'br'],
+  ALLOWED_ATTR: ['href'],
+}
+
+function sanitizeReleaseNotes(html: string): string {
+  return String(DOMPurify.sanitize(html, RELEASE_NOTES_SANITIZE_CONFIG))
+}
 
 function formatVelocidad(bytesPerSecond: number): string {
   if (bytesPerSecond >= 1024 * 1024) return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`
@@ -74,7 +84,7 @@ export function UpdateBadge() {
                 '[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-foreground',
                 '[&_a]:text-primary [&_a]:underline'
               )}
-              dangerouslySetInnerHTML={{ __html: info.releaseNotes }}
+              dangerouslySetInnerHTML={{ __html: sanitizeReleaseNotes(info.releaseNotes) }}
             />
           </ScrollArea>
         )}

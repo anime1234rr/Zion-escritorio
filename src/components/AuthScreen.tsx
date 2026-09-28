@@ -4,7 +4,7 @@ import { Eye, EyeOff } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn, getErrorMessage } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
-import { AUTH_CALLBACK_URL } from '@/lib/auth-deep-links'
+import { createAuthCallbackUrl } from '@/lib/auth-deep-links'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -68,7 +68,7 @@ export function AuthScreen() {
           password,
           options: {
             data: nombreUsuarioTrim ? { nombre_usuario: nombreUsuarioTrim } : undefined,
-            emailRedirectTo: AUTH_CALLBACK_URL,
+            emailRedirectTo: createAuthCallbackUrl(),
           },
         })
         if (error) throw error

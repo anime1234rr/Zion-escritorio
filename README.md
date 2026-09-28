@@ -57,7 +57,7 @@ Zion combina dos capas:
 - **En la nube**: el contenido de las comunidades (mensajes, servidores, roles, canales, archivos) se sincroniza en tiempo real entre todos tus dispositivos apenas se envía o se modifica, sin que tengas que actualizar nada manualmente.
 - **En local**: Zion corre como un ejecutable instalado en tu escritorio, con integración nativa al sistema operativo (notificaciones, portapapeles, enlaces de invitación directos, actualizaciones automáticas en segundo plano). La personalización local solo está disponible a través de los archivos y herramientas oficiales que provee el desarrollador — nunca modificando el código o los binarios por cuenta propia.
 
-> **Plataformas**: por ahora Zion solo se distribuye para Windows. Mac y Linux todavía no están soportados.
+> **Plataformas**: Zion se distribuye para Windows y Linux. Mac todavía no está soportado.
 
 
 ## Licencia

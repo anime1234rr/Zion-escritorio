@@ -56,7 +56,10 @@ jobs:
   build:
     needs: tag
     if: needs.tag.outputs.created == 'true'
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -82,27 +85,38 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
+  finalize:
+    needs: [tag, build]
+    if: needs.tag.outputs.created == 'true'
+    runs-on: ubuntu-latest
+    steps:
       - name: Publicar la release (sacarla de estado borrador)
-        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ needs.tag.outputs.tag }}"
-          gh release edit "$TAG" --draft=false
+          gh release edit "$TAG" --draft=false --repo "${{ github.repository }}"
 
       - name: Verificar que la release publicada tenga los artefactos completos
-        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ needs.tag.outputs.tag }}"
-          ASSETS=$(gh release view "$TAG" --json assets -q '[.assets[].name] | join(", ")')
+          ASSETS=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets -q '[.assets[].name] | join(", ")')
           echo "Assets publicados en $TAG: $ASSETS"
           if ! echo "$ASSETS" | grep -q "latest.yml"; then
-            echo "::error::La release $TAG no tiene latest.yml adjunto — electron-updater no podrá detectar esta versión. Publicación incompleta, revisar manualmente en GitHub Releases."
+            echo "::error::La release $TAG no tiene latest.yml adjunto — electron-updater no podrá detectar esta versión en Windows. Publicación incompleta, revisar manualmente en GitHub Releases."
             exit 1
           fi
           if ! echo "$ASSETS" | grep -q "\.exe"; then
             echo "::error::La release $TAG no tiene el instalador .exe adjunto. Publicación incompleta, revisar manualmente en GitHub Releases."
+            exit 1
+          fi
+          if ! echo "$ASSETS" | grep -q "latest-linux.yml"; then
+            echo "::error::La release $TAG no tiene latest-linux.yml adjunto — electron-updater no podrá detectar esta versión en Linux. Publicación incompleta, revisar manualmente en GitHub Releases."
+            exit 1
+          fi
+          if ! echo "$ASSETS" | grep -q "\.AppImage"; then
+            echo "::error::La release $TAG no tiene el .AppImage adjunto. Publicación incompleta, revisar manualmente en GitHub Releases."
             exit 1
           fi
