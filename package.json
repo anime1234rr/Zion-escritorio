@@ -83,7 +83,7 @@
       ],
       "icon": "build/icon.png",
       "category": "Network",
-      "artifactName": "Zion-linux.${ext}",
+      "artifactName": "Zion-linux",
       "syncDesktopName": true,
       "desktop": {
         "entry": {
@@ -107,7 +107,7 @@
       "shortcutName": "Zion",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
-      "artifactName": "${productName}-${version}-Setup.${ext}",
+      "artifactName": "${productName}.${ext}",
       "runAfterFinish": true,
       "differentialPackage": false
     },
