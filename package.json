@@ -1,7 +1,7 @@
 {
   "name": "zion",
   "private": true,
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "Zion",
   "author": "anime1234rr",
   "type": "module",
@@ -83,6 +83,7 @@
       ],
       "icon": "build/icon.png",
       "category": "Network",
+      "artifactName": "Zion-linux.${ext}",
       "syncDesktopName": true,
       "desktop": {
         "entry": {
@@ -106,7 +107,7 @@
       "shortcutName": "Zion",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
-      "artifactName": "${productName}.${ext}",
+      "artifactName": "${productName}-${version}-Setup.${ext}",
       "runAfterFinish": true,
       "differentialPackage": false
     },
