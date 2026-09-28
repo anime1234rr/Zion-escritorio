@@ -116,7 +116,7 @@ jobs:
             echo "::error::La release $TAG no tiene latest-linux.yml adjunto — electron-updater no podrá detectar esta versión en Linux. Publicación incompleta, revisar manualmente en GitHub Releases."
             exit 1
           fi
-          if ! echo "$ASSETS" | grep -q "\.AppImage"; then
-            echo "::error::La release $TAG no tiene el .AppImage adjunto. Publicación incompleta, revisar manualmente en GitHub Releases."
+          if ! echo "$ASSETS" | grep -q "Zion-linux"; then
+            echo "::error::La release $TAG no tiene el ejecutable Zion-linux adjunto. Publicación incompleta, revisar manualmente en GitHub Releases."
             exit 1
           fi
