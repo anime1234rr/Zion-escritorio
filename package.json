@@ -1,7 +1,7 @@
 {
   "name": "zion",
   "private": true,
-  "version": "1.10.3",
+  "version": "1.10.4",
   "description": "Zion",
   "author": "anime1234rr",
   "type": "module",
@@ -68,8 +68,10 @@
     "productName": "Zion",
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "!node_modules/**/*"
     ],
+    "compression": "maximum",
     "directories": {
       "output": "release"
     },

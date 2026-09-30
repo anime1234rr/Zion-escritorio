@@ -53,6 +53,8 @@ function serializarUpdateInfo(info: UpdateInfo) {
 }
 
 app.commandLine.appendSwitch('disable-features', 'MediaFoundationVideoCapture')
+app.commandLine.appendSwitch('force_high_performance_gpu')
+app.commandLine.appendSwitch('enable-zero-copy')
 
 registerLocalMediaScheme()
 

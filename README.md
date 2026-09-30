@@ -66,19 +66,3 @@ Zion combina dos capas:
 - **En local**: Zion corre como un ejecutable instalado en tu escritorio, con integración nativa al sistema operativo (notificaciones, portapapeles, enlaces de invitación directos, actualizaciones automáticas en segundo plano). La personalización local solo está disponible a través de los archivos y herramientas oficiales que provee el desarrollador — nunca modificando el código o los binarios por cuenta propia.
 
 > **Plataformas**: Zion se distribuye para Windows y Linux. Mac todavía no está soportado.
-
-
-## Licencia
-
-Zion es una app de código propietario. Instalarla te da un permiso personal, revocable y no exclusivo para usarla tal como se distribuye oficialmente — este permiso no incluye ningún derecho sobre el código fuente más allá de ejecutarla como aplicación compilada.
-
-- **Titularidad**: Zion, su código fuente, binarios, instaladores, recursos gráficos, nombre y marca son propiedad exclusiva de anime1234rr.
-- **Prohibido**: clonar, copiar, redistribuir o publicar el código fuente, los instaladores o los binarios, total o parcialmente, sin autorización previa y por escrito.
-- **Prohibido**: alterar, parchear, descompilar, hacer ingeniería inversa o modificar el código fuente, los binarios o la estructura de la app. La personalización local solo está permitida a través de archivos y herramientas que el autor provea o autorice expresamente.
-- **Marca**: "Zion" y su logotipo no pueden usarse para presentar productos derivados, forks o servicios de terceros como si fueran oficiales.
-- **Garantía**: la app se entrega "tal cual", sin garantía de ningún tipo, y el autor no se hace responsable de daños o pérdidas derivadas de su uso.
-- El incumplimiento de estos términos revoca automáticamente los permisos otorgados.
-
-Ver [LICENSE](./LICENSE) para el texto legal completo. Para autorizaciones, licencias comerciales o reportar un uso indebido, contactar directamente al autor.
-
-© 2026 @anime1234rr. Todos los derechos reservados.
