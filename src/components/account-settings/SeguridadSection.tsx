@@ -37,11 +37,6 @@ const OPCIONES: {
       'Notificar a los usuarios cuando su dirección de correo electrónico haya cambiado.',
   },
   {
-    clave: 'cambioTelefono',
-    label: 'Número de teléfono cambiado',
-    description: 'Notificar a los usuarios cuando su número de teléfono haya cambiado.',
-  },
-  {
     clave: 'metodoLoginVinculado',
     label: 'Método de inicio de sesión vinculado',
     description:

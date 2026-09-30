@@ -119,7 +119,7 @@ export function UserProfileCard({
     if (!open) return
     let cancelado = false
 
-    const puedeVerRoles = Boolean(server) && !isOwnProfile
+    const puedeVerRoles = Boolean(server)
 
     Promise.all([
       obtenerPerfilPublico(userId),
