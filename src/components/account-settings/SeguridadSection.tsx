@@ -1,14 +1,23 @@
-import { useEffect, useState } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Copy, Eye, EyeOff, ShieldCheck, Trash2 } from 'lucide-react'
 
 import {
   actualizarPreferenciasNotificacionSeguridad,
   obtenerPreferenciasNotificacionSeguridad,
   type SecurityNotificationPrefs,
 } from '@/lib/profiles'
+import {
+  confirmarEnrolamientoMfa,
+  iniciarEnrolamientoMfa,
+  listarFactoresMfa,
+  quitarFactorMfa,
+  type MfaEnrollment,
+  type MfaFactor,
+} from '@/lib/mfa'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
 import { requireReauth } from '@/lib/reauth-gate'
+import { writeClipboard } from '@/lib/electron-bridge'
 import { getErrorMessage } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -74,6 +83,14 @@ export function SeguridadSection({ userId }: SeguridadSectionProps) {
   const [changingPassword, setChangingPassword] = useState(false)
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordChanged, setPasswordChanged] = useState(false)
+
+  const [factors, setFactors] = useState<MfaFactor[]>([])
+  const [mfaLoading, setMfaLoading] = useState(true)
+  const [enrolling, setEnrolling] = useState<MfaEnrollment | null>(null)
+  const [mfaCode, setMfaCode] = useState('')
+  const [mfaBusy, setMfaBusy] = useState(false)
+  const [mfaError, setMfaError] = useState<string | null>(null)
+  const [secretCopied, setSecretCopied] = useState(false)
 
   useEffect(() => {
     let cancelado = false
@@ -143,6 +160,72 @@ export function SeguridadSection({ userId }: SeguridadSectionProps) {
       setChangingPassword(false)
     }
   }
+
+  const cargarMfa = useCallback(() => {
+    listarFactoresMfa()
+      .then(setFactors)
+      .catch(() => setFactors([]))
+      .finally(() => setMfaLoading(false))
+  }, [])
+
+  useEffect(() => {
+    cargarMfa()
+  }, [cargarMfa])
+
+  async function empezarMfa() {
+    setMfaError(null)
+    setMfaBusy(true)
+    try {
+      setEnrolling(await iniciarEnrolamientoMfa('Zion escritorio'))
+      setMfaCode('')
+    } catch (err) {
+      setMfaError(getErrorMessage(err))
+    } finally {
+      setMfaBusy(false)
+    }
+  }
+
+  async function cancelarEnrolamiento() {
+    const pendiente = enrolling
+    setEnrolling(null)
+    setMfaCode('')
+    if (pendiente) {
+      await quitarFactorMfa(pendiente.factorId).catch(() => {})
+    }
+  }
+
+  async function confirmarMfa() {
+    if (!enrolling || mfaCode.trim().length < 6) return
+    setMfaError(null)
+    setMfaBusy(true)
+    try {
+      await confirmarEnrolamientoMfa(enrolling.factorId, mfaCode)
+      setEnrolling(null)
+      cargarMfa()
+    } catch (err) {
+      setMfaError(getErrorMessage(err))
+    } finally {
+      setMfaBusy(false)
+    }
+  }
+
+  async function quitarMfa(factor: MfaFactor) {
+    try {
+      await quitarFactorMfa(factor.id)
+      cargarMfa()
+    } catch (err) {
+      setMfaError(getErrorMessage(err))
+    }
+  }
+
+  async function copiarSecreto() {
+    if (!enrolling) return
+    await writeClipboard(enrolling.secret).catch(() => {})
+    setSecretCopied(true)
+    setTimeout(() => setSecretCopied(false), 2000)
+  }
+
+  const factoresActivos = factors.filter((f) => f.status === 'verified')
 
   return (
     <div className="max-w-2xl">
@@ -246,6 +329,99 @@ export function SeguridadSection({ userId }: SeguridadSectionProps) {
 
           <Button type="button" className="mt-2 self-start" disabled={!isDirty || saving} onClick={handleSave}>
             {saving ? 'Guardando…' : 'Guardar cambios'}
+          </Button>
+        </div>
+      )}
+
+      <h1 className="mt-8 text-lg font-semibold text-foreground">Verificación en dos pasos (TOTP)</h1>
+
+      {mfaLoading ? (
+        <p className="mt-4 text-sm text-muted-foreground">Cargando…</p>
+      ) : enrolling ? (
+        <div className="mt-4 flex flex-col gap-3 rounded-lg border border-border p-3">
+          <p className="text-sm text-muted-foreground">
+            Agregá esta clave a tu app de autenticación (Google Authenticator, Authy, 1Password…) y
+            después ingresá el código de 6 dígitos.
+          </p>
+          <button
+            type="button"
+            onClick={copiarSecreto}
+            className="flex items-center justify-between gap-2 rounded-md bg-muted px-3 py-2 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <span className="truncate font-mono text-sm text-foreground">{enrolling.secret}</span>
+            <Copy className="size-4 shrink-0 text-muted-foreground" />
+          </button>
+          {secretCopied && <p className="text-xs text-muted-foreground">Copiado ✓</p>}
+          <Input
+            placeholder="Código de 6 dígitos"
+            inputMode="numeric"
+            maxLength={6}
+            value={mfaCode}
+            onChange={(event) => setMfaCode(event.target.value)}
+          />
+          {mfaError && (
+            <p className="text-sm text-destructive" role="alert">
+              {mfaError}
+            </p>
+          )}
+          <div className="flex items-center justify-end gap-4">
+            <button
+              type="button"
+              onClick={cancelarEnrolamiento}
+              disabled={mfaBusy}
+              className="text-sm text-muted-foreground outline-none hover:text-foreground"
+            >
+              Cancelar
+            </button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={mfaCode.trim().length < 6 || mfaBusy}
+              onClick={confirmarMfa}
+            >
+              {mfaBusy ? 'Verificando…' : 'Activar'}
+            </Button>
+          </div>
+        </div>
+      ) : factoresActivos.length > 0 ? (
+        <div className="mt-4 flex flex-col gap-2">
+          {factoresActivos.map((factor) => (
+            <div
+              key={factor.id}
+              className="flex items-center gap-2 rounded-lg border border-border p-3"
+            >
+              <ShieldCheck className="size-4.5 shrink-0 text-online" />
+              <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                {factor.friendlyName || 'App de autenticación'}
+              </p>
+              <button
+                type="button"
+                onClick={() => quitarMfa(factor)}
+                aria-label="Quitar verificación en dos pasos"
+                className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground outline-none hover:bg-muted hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </div>
+          ))}
+          {mfaError && (
+            <p className="text-sm text-destructive" role="alert">
+              {mfaError}
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="mt-4 flex flex-col gap-2">
+          <p className="text-sm text-muted-foreground">
+            Sumá una capa extra pidiendo un código de tu app de autenticación al iniciar sesión.
+          </p>
+          {mfaError && (
+            <p className="text-sm text-destructive" role="alert">
+              {mfaError}
+            </p>
+          )}
+          <Button type="button" size="sm" className="self-start" disabled={mfaBusy} onClick={empezarMfa}>
+            Activar verificación en dos pasos
           </Button>
         </div>
       )}
