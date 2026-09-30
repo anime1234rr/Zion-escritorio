@@ -587,5 +587,5 @@ autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
 
 autoUpdater.on('error', (err) => {
   log.error('Error en el auto-updater', err)
-  win?.webContents.send('zion-update-error', err.message)
+  win?.webContents.send('zion-update-error', 'No se pudo comprobar si hay actualizaciones disponibles.')
 })

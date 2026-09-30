@@ -53,7 +53,13 @@ export function UpdateBadge() {
           ) : (
             <Sparkles className="size-4 text-primary" />
           )}
-          <span>{status === 'checking' ? 'Comprobando actualizaciones…' : 'Actualización disponible'}</span>
+          <span>
+            {status === 'checking'
+              ? 'Comprobando actualizaciones…'
+              : status === 'error'
+                ? 'Error al comprobar actualizaciones'
+                : 'Actualización disponible'}
+          </span>
         </button>
       </DialogTrigger>
 
@@ -63,9 +69,11 @@ export function UpdateBadge() {
             Zion {info ? `v${info.version}` : ''}
           </DialogTitle>
           <DialogDescription>
-            {info?.releaseDate
-              ? `Publicada el ${new Date(info.releaseDate).toLocaleDateString('es-AR')}`
-              : 'Hay una nueva versión disponible.'}
+            {status === 'error'
+              ? 'No se pudo comprobar si hay actualizaciones.'
+              : info?.releaseDate
+                ? `Publicada el ${new Date(info.releaseDate).toLocaleDateString('es-AR')}`
+                : 'Hay una nueva versión disponible.'}
           </DialogDescription>
         </DialogHeader>
 

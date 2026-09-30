@@ -2,7 +2,7 @@ import { Code2, FolderGit2, Palette, ScrollText } from 'lucide-react'
 
 import { openExternal } from '@/lib/electron-bridge'
 
-const REPO_URL = 'https://github.com/anime1234rr/zion'
+const REPO_URL = 'https://github.com/anime1234rr/Zion-escritorio'
 const DEV_URL = 'https://github.com/anime1234rr'
 const LOGO_AUTHOR_URL = 'https://github.com/Axolote90'
 

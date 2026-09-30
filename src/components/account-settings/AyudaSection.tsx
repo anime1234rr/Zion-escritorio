@@ -12,7 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import { openExternal } from '@/lib/electron-bridge'
 
-const REPO_URL = 'https://github.com/anime1234rr/zion'
+const REPO_URL = 'https://github.com/anime1234rr/Zion-escritorio'
 const STATUS_URL = 'https://zion.betteruptime.com/'
 
 interface EnlaceItem {
