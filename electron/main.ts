@@ -22,7 +22,7 @@ import { registerLocalMediaScheme, setupLocalMedia } from './local-media'
 
 log.transports.file.level = 'info'
 
-const ZION_WEB_URL = 'https://zionzx.netlify.app'
+const ZION_WEB_URL = 'https://zionq.netlify.app'
 
 interface UpdateCheckResult {
   version: string
