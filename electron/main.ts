@@ -23,12 +23,26 @@ import { registerLocalMediaScheme, setupLocalMedia } from './local-media'
 log.transports.file.level = 'info'
 
 const ZION_WEB_URL = 'https://zionq.netlify.app'
+const GITHUB_OWNER = 'anime1234rr'
+const GITHUB_REPO = 'Zion-escritorio'
 
 interface UpdateCheckResult {
   version: string
   releaseDate: string
   releaseNotes: string
   downloadUrl: string
+}
+
+interface RemoteVersionData {
+  version: string
+  releaseNotes: string
+  releaseDate: string
+  downloadUrl: string
+}
+
+const GITHUB_ASSET_NAME: Record<'windows' | 'linux', string> = {
+  windows: 'Zion.exe',
+  linux: 'Zion-linux',
 }
 
 function platformKeyForUpdates(): 'windows' | 'linux' | null {
@@ -49,26 +63,58 @@ function isNewerVersion(remote: string, local: string): boolean {
   return false
 }
 
-async function fetchUpdateInfo(): Promise<UpdateCheckResult | null> {
-  const platform = platformKeyForUpdates()
-  if (!platform) return null
-
+async function fetchVersionViaWebProxy(platform: 'windows' | 'linux'): Promise<RemoteVersionData | null> {
   const res = await fetch(`${ZION_WEB_URL}/api/version/${platform}`)
-  if (!res.ok) throw new Error(`zion-web respondió ${res.status}`)
+  if (!res.ok) return null
 
   const data = (await res.json()) as {
     version: string
     releaseNotes?: string
     releaseDate?: string | null
   }
-  if (!isNewerVersion(data.version, app.getVersion())) return null
-
   return {
     version: data.version,
-    releaseDate: data.releaseDate ?? '',
     releaseNotes: data.releaseNotes ?? '',
+    releaseDate: data.releaseDate ?? '',
     downloadUrl: `${ZION_WEB_URL}/api/download/${platform}`,
   }
+}
+
+async function fetchVersionViaGithubDirect(platform: 'windows' | 'linux'): Promise<RemoteVersionData | null> {
+  const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`, {
+    headers: { Accept: 'application/vnd.github+json' },
+  })
+  if (!res.ok) return null
+
+  const release = (await res.json()) as {
+    tag_name: string
+    body?: string
+    published_at?: string
+    assets: { name: string; browser_download_url: string }[]
+  }
+  const asset = release.assets.find((a) => a.name === GITHUB_ASSET_NAME[platform])
+  if (!asset) return null
+
+  return {
+    version: release.tag_name.replace(/^v/, ''),
+    releaseNotes: release.body ?? '',
+    releaseDate: release.published_at ?? '',
+    downloadUrl: asset.browser_download_url,
+  }
+}
+
+async function fetchUpdateInfo(): Promise<UpdateCheckResult | null> {
+  const platform = platformKeyForUpdates()
+  if (!platform) return null
+
+  const data =
+    (await fetchVersionViaWebProxy(platform).catch(() => null)) ??
+    (await fetchVersionViaGithubDirect(platform).catch(() => null))
+
+  if (!data) throw new Error('No se pudo verificar actualizaciones (zion-web y GitHub fallaron)')
+  if (!isNewerVersion(data.version, app.getVersion())) return null
+
+  return data
 }
 
 app.commandLine.appendSwitch('disable-features', 'MediaFoundationVideoCapture')

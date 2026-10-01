@@ -4,10 +4,11 @@ import { ImagePlus } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { crearServidor } from '@/lib/servers'
 import { ICONO_SERVIDOR_ACCEPT, subirIconoServidor } from '@/lib/storage'
-import { listarPlantillas, type PlantillaServidor } from '@/lib/templates'
+import { listarPlantillasConDetalle, type PlantillaServidorDetalle } from '@/lib/templates'
 import { cn, getErrorMessage } from '@/lib/utils'
 import type { ServerItem } from '@/lib/types'
 import { Button } from '@/components/ui/button'
+import { PlantillaPreview } from '@/components/PlantillaPreview'
 import {
   Dialog,
   DialogContent,
@@ -34,20 +35,22 @@ export function CrearServidorDialog({
   const [nombre, setNombre] = useState('')
   const [iconFile, setIconFile] = useState<File | null>(null)
   const [iconPreview, setIconPreview] = useState<string | null>(null)
-  const [plantillas, setPlantillas] = useState<PlantillaServidor[]>([])
+  const [plantillas, setPlantillas] = useState<PlantillaServidorDetalle[]>([])
   const [plantillaId, setPlantillaId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    listarPlantillas()
+    listarPlantillasConDetalle()
       .then((data) => {
         setPlantillas(data)
         setPlantillaId((prev) => prev ?? data[0]?.id ?? null)
       })
       .catch((err) => console.error('No se pudieron cargar las plantillas', err))
   }, [])
+
+  const plantillaSeleccionada = plantillas.find((p) => p.id === plantillaId) ?? null
 
   function handlePickIcon(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -100,7 +103,7 @@ export function CrearServidorDialog({
         if (!loading) onOpenChange(next)
       }}
     >
-      <DialogContent>
+      <DialogContent className="sm:max-w-2xl">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Crear servidor</DialogTitle>
@@ -151,38 +154,53 @@ export function CrearServidorDialog({
           </div>
 
           {plantillas.length > 0 && (
-            <div className="mt-4 flex flex-col gap-1.5">
-              <Label>Plantilla</Label>
+            <div className="mt-4 grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                {plantillas.map((plantilla) => (
-                  <button
-                    key={plantilla.id}
-                    type="button"
-                    onClick={() => setPlantillaId(plantilla.id)}
-                    aria-pressed={plantillaId === plantilla.id}
-                    className={cn(
-                      'flex items-start gap-2.5 rounded-lg border border-border px-3 py-2 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50',
-                      plantillaId === plantilla.id &&
-                        'border-primary bg-primary/10'
-                    )}
-                  >
-                    {plantilla.iconoDefecto && (
-                      <span className="mt-0.5 text-base leading-none" aria-hidden>
-                        {plantilla.iconoDefecto}
-                      </span>
-                    )}
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium text-foreground">
-                        {plantilla.nombre}
-                      </span>
-                      {plantilla.descripcion && (
-                        <span className="block text-xs text-muted-foreground">
-                          {plantilla.descripcion}
+                <Label>Plantilla</Label>
+                <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+                  {plantillas.map((plantilla) => (
+                    <button
+                      key={plantilla.id}
+                      type="button"
+                      onClick={() => setPlantillaId(plantilla.id)}
+                      aria-pressed={plantillaId === plantilla.id}
+                      className={cn(
+                        'flex items-start gap-2.5 rounded-lg border border-border px-3 py-2 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50',
+                        plantillaId === plantilla.id &&
+                          'border-primary bg-primary/10'
+                      )}
+                    >
+                      {plantilla.iconoDefecto && (
+                        <span className="mt-0.5 text-base leading-none" aria-hidden>
+                          {plantilla.iconoDefecto}
                         </span>
                       )}
-                    </span>
-                  </button>
-                ))}
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium text-foreground">
+                          {plantilla.nombre}
+                        </span>
+                        {plantilla.descripcion && (
+                          <span className="block text-xs text-muted-foreground">
+                            {plantilla.descripcion}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label>Así arranca tu servidor</Label>
+                <div className="max-h-72 overflow-y-auto rounded-lg border border-border bg-muted/20 p-3">
+                  {plantillaSeleccionada ? (
+                    <PlantillaPreview plantilla={plantillaSeleccionada} />
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Elegí una plantilla para ver sus canales.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}

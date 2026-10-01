@@ -1,4 +1,4 @@
-import { Compass, Home, Plus, ShieldAlert, UserPlus } from 'lucide-react'
+import { Code2, Compass, Home, Plus, ShieldAlert, UserPlus } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { PerfProfiler } from '@/lib/internal/perf-metrics'
@@ -195,6 +195,22 @@ export function SidebarServidores({
             </button>
           </TooltipTrigger>
           <TooltipContent side="right">Explorar</TooltipContent>
+        </Tooltip>
+      </div>
+
+      <div className="w-full shrink-0 px-2">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              disabled
+              aria-label="Temas (próximamente)"
+              className="relative mx-auto flex size-12 cursor-not-allowed items-center justify-center rounded-2xl bg-secondary/50 text-muted-foreground outline-none select-none"
+            >
+              <Code2 className="size-5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Temas — Próximamente</TooltipContent>
         </Tooltip>
       </div>
 

@@ -25,6 +25,18 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'bloqueados', label: 'Bloqueados' },
 ]
 
+const TAB_STORAGE_KEY = 'zion:inicio:tab'
+
+function leerTabGuardada(): Tab {
+  try {
+    const raw = window.localStorage.getItem(TAB_STORAGE_KEY)
+    if (raw === 'online' || raw === 'todos' || raw === 'pendientes' || raw === 'bloqueados') return raw
+    return 'online'
+  } catch {
+    return 'online'
+  }
+}
+
 interface FriendsSidebarProps {
   currentUserId: string
   profile: ChatUser | null
@@ -44,7 +56,7 @@ export function FriendsSidebar({
   onSignOut,
   onProfileUpdated,
 }: FriendsSidebarProps) {
-  const [tab, setTab] = useState<Tab>('online')
+  const [tab, setTabState] = useState<Tab>(leerTabGuardada)
   const [friends, setFriends] = useState<Friend[]>([])
   const [conversations, setConversations] = useState<DMConversation[]>([])
   const [loading, setLoading] = useState(true)
@@ -55,6 +67,15 @@ export function FriendsSidebar({
   const [searching, setSearching] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
   const [sentTo, setSentTo] = useState<Set<string>>(new Set())
+
+  function setTab(next: Tab) {
+    setTabState(next)
+    try {
+      window.localStorage.setItem(TAB_STORAGE_KEY, next)
+    } catch {
+      return
+    }
+  }
 
   function reload() {
     return Promise.all([listarAmistades(currentUserId), listarConversaciones(currentUserId)])
