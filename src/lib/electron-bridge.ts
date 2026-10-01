@@ -2,7 +2,13 @@ export interface UpdateInfoPayload {
   version: string
   releaseDate: string
   releaseNotes: string
-  downloadUrl: string
+}
+
+export interface UpdateProgressPayload {
+  percent: number
+  bytesPerSecond: number
+  transferred: number
+  total: number
 }
 
 export interface ScreenSourcePayload {
@@ -39,7 +45,11 @@ interface ElectronAPI {
   listScreenSources: () => Promise<ScreenSourcePayload[]>
   selectScreenSource: (sourceId: string, includeAudio: boolean) => void
   checkForUpdates: () => Promise<UpdateInfoPayload | null>
+  downloadUpdate: () => void
+  installUpdate: () => void
   onUpdateAvailable: (callback: (info: UpdateInfoPayload) => void) => () => void
+  onUpdateProgress: (callback: (progress: UpdateProgressPayload) => void) => () => void
+  onUpdateDownloaded: (callback: (info: UpdateInfoPayload) => void) => () => void
   onUpdateError: (callback: (message: string) => void) => () => void
   clearCache: () => Promise<void>
   openUserDataFolder: () => void
@@ -164,8 +174,24 @@ export function checkForUpdates(): Promise<UpdateInfoPayload | null> {
   return window.electronAPI?.checkForUpdates() ?? Promise.resolve(null)
 }
 
+export function downloadUpdate(): void {
+  window.electronAPI?.downloadUpdate()
+}
+
+export function installUpdate(): void {
+  window.electronAPI?.installUpdate()
+}
+
 export function onUpdateAvailable(callback: (info: UpdateInfoPayload) => void): () => void {
   return window.electronAPI?.onUpdateAvailable(callback) ?? (() => {})
+}
+
+export function onUpdateProgress(callback: (progress: UpdateProgressPayload) => void): () => void {
+  return window.electronAPI?.onUpdateProgress(callback) ?? (() => {})
+}
+
+export function onUpdateDownloaded(callback: (info: UpdateInfoPayload) => void): () => void {
+  return window.electronAPI?.onUpdateDownloaded(callback) ?? (() => {})
 }
 
 export function onUpdateError(callback: (message: string) => void): () => void {

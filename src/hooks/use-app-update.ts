@@ -2,18 +2,23 @@ import { useEffect, useRef, useState } from 'react'
 
 import {
   checkForUpdates,
+  downloadUpdate,
+  installUpdate,
   onUpdateAvailable,
+  onUpdateDownloaded,
   onUpdateError,
-  openExternal,
+  onUpdateProgress,
   type UpdateInfoPayload,
+  type UpdateProgressPayload,
 } from '@/lib/electron-bridge'
 import { pushToast } from '@/hooks/use-toasts'
 
-export type AppUpdateStatus = 'idle' | 'checking' | 'available' | 'error'
+export type AppUpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error'
 
 export function useAppUpdate() {
   const [status, setStatus] = useState<AppUpdateStatus>('idle')
   const [info, setInfo] = useState<UpdateInfoPayload | null>(null)
+  const [progress, setProgress] = useState<UpdateProgressPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [everShown, setEverShown] = useState(false)
   const notifiedVersionRef = useRef<string | null>(null)
@@ -23,9 +28,9 @@ export function useAppUpdate() {
     notifiedVersionRef.current = result.version
     pushToast({
       title: 'Actualización disponible',
-      description: `Zion v${result.version} ya está lista para descargar.`,
+      description: `Zion v${result.version} ya está lista para instalar.`,
       icon: 'sistema',
-      onClick: () => openExternal(result.downloadUrl),
+      onClick: download,
     })
   }
 
@@ -59,6 +64,18 @@ export function useAppUpdate() {
       notifyAvailable(result)
     })
 
+    const unsubProgress = onUpdateProgress((value) => {
+      setProgress(value)
+      setStatus('downloading')
+      setEverShown(true)
+    })
+
+    const unsubDownloaded = onUpdateDownloaded((result) => {
+      setInfo(result)
+      setStatus('downloaded')
+      setEverShown(true)
+    })
+
     const unsubError = onUpdateError((message) => {
       setError(message)
       setStatus('error')
@@ -67,13 +84,22 @@ export function useAppUpdate() {
 
     return () => {
       unsubAvailable()
+      unsubProgress()
+      unsubDownloaded()
       unsubError()
     }
   }, [])
 
   function download() {
-    if (info?.downloadUrl) openExternal(info.downloadUrl)
+    setError(null)
+    setProgress(null)
+    setStatus('downloading')
+    downloadUpdate()
   }
 
-  return { status, info, error, everShown, download, retryCheck }
+  function install() {
+    installUpdate()
+  }
+
+  return { status, info, progress, error, everShown, download, install, retryCheck }
 }
