@@ -8,6 +8,7 @@ import {
   Info,
   Keyboard,
   LifeBuoy,
+  Scale,
   Settings,
   ShieldAlert,
   ShieldCheck,
@@ -31,6 +32,7 @@ import { IdiomaSection } from '@/components/account-settings/IdiomaSection'
 import { AtajosSection } from '@/components/account-settings/AtajosSection'
 import { AyudaSection } from '@/components/account-settings/AyudaSection'
 import { AcercaDeSection } from '@/components/account-settings/AcercaDeSection'
+import { TerminosPrivacidadSection } from '@/components/account-settings/TerminosPrivacidadSection'
 import { EstadoCuentaSection } from '@/components/account-settings/EstadoCuentaSection'
 
 export type AccountSettingsSectionId =
@@ -45,6 +47,7 @@ export type AccountSettingsSectionId =
   | 'idioma'
   | 'atajos'
   | 'ayuda'
+  | 'terminos-privacidad'
   | 'acerca-de'
 
 const sections: { id: AccountSettingsSectionId; label: string; icon: typeof Settings }[] = [
@@ -59,6 +62,7 @@ const sections: { id: AccountSettingsSectionId; label: string; icon: typeof Sett
   { id: 'idioma', label: 'Idioma y Región', icon: Globe },
   { id: 'atajos', label: 'Atajos de Teclado', icon: Keyboard },
   { id: 'ayuda', label: 'Ayuda y Soporte', icon: LifeBuoy },
+  { id: 'terminos-privacidad', label: 'Términos y Privacidad', icon: Scale },
   { id: 'acerca-de', label: 'Acerca de', icon: Info },
 ]
 
@@ -158,6 +162,7 @@ function AccountSettingsBody({
           {active === 'idioma' && <IdiomaSection />}
           {active === 'atajos' && <AtajosSection />}
           {active === 'ayuda' && <AyudaSection />}
+          {active === 'terminos-privacidad' && <TerminosPrivacidadSection />}
           {active === 'acerca-de' && <AcercaDeSection />}
         </div>
       </div>
