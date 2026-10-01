@@ -4,13 +4,7 @@ interface UpdateInfoPayload {
   version: string
   releaseDate: string
   releaseNotes: string
-}
-
-interface UpdateProgressPayload {
-  percent: number
-  bytesPerSecond: number
-  transferred: number
-  total: number
+  downloadUrl: string
 }
 
 interface ScreenSourcePayload {
@@ -96,27 +90,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   checkForUpdates: (): Promise<UpdateInfoPayload | null> =>
     ipcRenderer.invoke('zion:check-for-updates'),
-  downloadUpdate: (): void => {
-    ipcRenderer.send('zion:download-update')
-  },
-  installUpdate: (): void => {
-    ipcRenderer.send('zion:install-update')
-  },
   onUpdateAvailable: (callback: (info: UpdateInfoPayload) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, info: UpdateInfoPayload) => callback(info)
     ipcRenderer.on('zion-update-available', listener)
     return () => ipcRenderer.removeListener('zion-update-available', listener)
-  },
-  onUpdateProgress: (callback: (progress: UpdateProgressPayload) => void): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, progress: UpdateProgressPayload) =>
-      callback(progress)
-    ipcRenderer.on('zion-update-progress', listener)
-    return () => ipcRenderer.removeListener('zion-update-progress', listener)
-  },
-  onUpdateDownloaded: (callback: (info: UpdateInfoPayload) => void): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, info: UpdateInfoPayload) => callback(info)
-    ipcRenderer.on('zion-update-downloaded', listener)
-    return () => ipcRenderer.removeListener('zion-update-downloaded', listener)
   },
   onUpdateError: (callback: (message: string) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, message: string) => callback(message)

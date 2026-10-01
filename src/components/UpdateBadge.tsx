@@ -1,7 +1,5 @@
 import { Download, Loader2, RefreshCw, Sparkles, TriangleAlert } from 'lucide-react'
-import DOMPurify, { type Config } from 'dompurify'
 
-import { cn } from '@/lib/utils'
 import { useAppUpdate } from '@/hooks/use-app-update'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -15,28 +13,11 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 
-const RELEASE_NOTES_SANITIZE_CONFIG: Config = {
-  ALLOWED_TAGS: ['h1', 'h2', 'h3', 'p', 'ul', 'ol', 'li', 'strong', 'em', 'code', 'a', 'br'],
-  ALLOWED_ATTR: ['href'],
-}
-
-function sanitizeReleaseNotes(html: string): string {
-  return String(DOMPurify.sanitize(html, RELEASE_NOTES_SANITIZE_CONFIG))
-}
-
-function formatVelocidad(bytesPerSecond: number): string {
-  if (bytesPerSecond >= 1024 * 1024) return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`
-  if (bytesPerSecond >= 1024) return `${(bytesPerSecond / 1024).toFixed(0)} KB/s`
-  return `${bytesPerSecond.toFixed(0)} B/s`
-}
-
 export function UpdateBadge() {
-  const { status, info, progress, error, everShown, download, install, retryCheck } = useAppUpdate()
+  const { status, info, error, everShown, download, retryCheck } = useAppUpdate()
 
   if (status === 'idle') return null
   if (status === 'checking' && !everShown) return null
-
-  const percent = Math.round(progress?.percent ?? 0)
 
   return (
     <Dialog>
@@ -79,36 +60,10 @@ export function UpdateBadge() {
 
         {info?.releaseNotes && (
           <ScrollArea className="max-h-64 rounded-md border border-border bg-muted/30 p-3">
-            <div
-              className={cn(
-                'text-xs text-muted-foreground',
-                '[&_h1]:mt-3 [&_h1]:mb-1 [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:text-foreground [&_h1]:first:mt-0',
-                '[&_h2]:mt-3 [&_h2]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:text-foreground [&_h2]:first:mt-0',
-                '[&_h3]:mt-3 [&_h3]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-foreground [&_h3]:first:mt-0',
-                '[&_p]:mb-2 [&_p]:last:mb-0',
-                '[&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-4',
-                '[&_li]:mb-0.5',
-                '[&_strong]:font-semibold [&_strong]:text-foreground',
-                '[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-foreground',
-                '[&_a]:text-primary [&_a]:underline'
-              )}
-              dangerouslySetInnerHTML={{ __html: sanitizeReleaseNotes(info.releaseNotes) }}
-            />
+            <pre className="whitespace-pre-wrap font-sans text-xs text-muted-foreground">
+              {info.releaseNotes}
+            </pre>
           </ScrollArea>
-        )}
-
-        {status === 'downloading' && (
-          <div className="flex flex-col gap-1.5">
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${percent}%` }}
-              />
-            </div>
-            <span className="text-xs text-muted-foreground">
-              {percent}%{progress ? ` · ${formatVelocidad(progress.bytesPerSecond)}` : ''}
-            </span>
-          </div>
         )}
 
         {status === 'checking' && (
@@ -135,21 +90,7 @@ export function UpdateBadge() {
           {status === 'available' && (
             <Button onClick={download} className="gap-2">
               <Download className="size-4" />
-              Actualizar ahora
-            </Button>
-          )}
-
-          {status === 'downloading' && (
-            <Button disabled className="gap-2">
-              <Download className="size-4" />
-              Descargando… {percent}%
-            </Button>
-          )}
-
-          {status === 'downloaded' && (
-            <Button onClick={install} className="gap-2">
-              <RefreshCw className="size-4" />
-              Reiniciar y aplicar
+              Descargar actualización
             </Button>
           )}
 

@@ -13,7 +13,6 @@ import {
   shell,
   Tray,
 } from 'electron'
-import electronUpdater, { type ProgressInfo, type UpdateInfo } from 'electron-updater'
 import log from 'electron-log'
 import { access, mkdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
@@ -21,34 +20,54 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { registerLocalMediaScheme, setupLocalMedia } from './local-media'
 
-const { autoUpdater } = electronUpdater
-autoUpdater.logger = log
-autoUpdater.autoDownload = false
-autoUpdater.autoInstallOnAppQuit = true
 log.transports.file.level = 'info'
 
-function decodeXmlEntities(text: string): string {
-  return text
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&amp;/g, '&')
+const ZION_WEB_URL = 'https://zionzx.netlify.app'
+
+interface UpdateCheckResult {
+  version: string
+  releaseDate: string
+  releaseNotes: string
+  downloadUrl: string
 }
 
-function serializarUpdateInfo(info: UpdateInfo) {
-  const notas = info.releaseNotes
-  const releaseNotes =
-    typeof notas === 'string'
-      ? decodeXmlEntities(notas)
-      : Array.isArray(notas)
-        ? notas.map((n) => `<h3>v${n.version}</h3>${decodeXmlEntities(n.note ?? '')}`).join('')
-        : ''
+function platformKeyForUpdates(): 'windows' | 'linux' | null {
+  if (process.platform === 'win32') return 'windows'
+  if (process.platform === 'linux') return 'linux'
+  return null
+}
+
+function isNewerVersion(remote: string, local: string): boolean {
+  const toParts = (v: string) => v.split('.').map((part) => parseInt(part, 10) || 0)
+  const r = toParts(remote)
+  const l = toParts(local)
+  for (let i = 0; i < Math.max(r.length, l.length); i++) {
+    const a = r[i] ?? 0
+    const b = l[i] ?? 0
+    if (a !== b) return a > b
+  }
+  return false
+}
+
+async function fetchUpdateInfo(): Promise<UpdateCheckResult | null> {
+  const platform = platformKeyForUpdates()
+  if (!platform) return null
+
+  const res = await fetch(`${ZION_WEB_URL}/api/version/${platform}`)
+  if (!res.ok) throw new Error(`zion-web respondió ${res.status}`)
+
+  const data = (await res.json()) as {
+    version: string
+    releaseNotes?: string
+    releaseDate?: string | null
+  }
+  if (!isNewerVersion(data.version, app.getVersion())) return null
 
   return {
-    version: info.version,
-    releaseDate: info.releaseDate,
-    releaseNotes,
+    version: data.version,
+    releaseDate: data.releaseDate ?? '',
+    releaseNotes: data.releaseNotes ?? '',
+    downloadUrl: `${ZION_WEB_URL}/api/download/${platform}`,
   }
 }
 
@@ -88,7 +107,6 @@ let win: BrowserWindow | null = null
 let tray: Tray | null = null
 
 let allowClose = false
-let quitAndInstallPending = false
 let isQuitting = false
 let pendingScreenSourceId: string | null = null
 let pendingScreenAudio = false
@@ -194,11 +212,6 @@ function createWindow() {
 
   win.on('close', (event) => {
     if (allowClose || !win) return
-
-    if (quitAndInstallPending) {
-      allowClose = true
-      return
-    }
 
     if (!isQuitting && tray) {
       event.preventDefault()
@@ -377,8 +390,7 @@ if (!gotLock) {
   ipcMain.handle('zion:check-for-updates', async () => {
     if (!app.isPackaged) return null
     try {
-      const resultado = await autoUpdater.checkForUpdates()
-      return resultado?.isUpdateAvailable ? serializarUpdateInfo(resultado.updateInfo) : null
+      return await fetchUpdateInfo()
     } catch (err) {
       log.error('No se pudo verificar actualizaciones', err)
       return null
@@ -401,17 +413,6 @@ if (!gotLock) {
   ipcMain.on('zion:select-screen-source', (_event, sourceId: string, includeAudio: boolean) => {
     pendingScreenSourceId = sourceId
     pendingScreenAudio = includeAudio
-  })
-
-  ipcMain.on('zion:download-update', () => {
-    autoUpdater.downloadUpdate().catch((err) => {
-      log.error('No se pudo descargar la actualización', err)
-    })
-  })
-
-  ipcMain.on('zion:install-update', () => {
-    quitAndInstallPending = true
-    autoUpdater.quitAndInstall(true, true)
   })
 
   ipcMain.handle('zion:clear-cache', async () => {
@@ -552,42 +553,23 @@ if (!gotLock) {
     })
 
     if (app.isPackaged) {
-      win?.once('ready-to-show', () => {
-        autoUpdater.checkForUpdates().catch((err) => {
+      const runBackgroundUpdateCheck = async () => {
+        try {
+          const result = await fetchUpdateInfo()
+          if (result) win?.webContents.send('zion-update-available', result)
+        } catch (err) {
           log.error('No se pudo verificar actualizaciones', err)
-        })
+          win?.webContents.send('zion-update-error', 'No se pudo comprobar si hay actualizaciones disponibles.')
+        }
+      }
+
+      win?.once('ready-to-show', () => {
+        void runBackgroundUpdateCheck()
       })
 
-      setInterval(
-        () => {
-          autoUpdater.checkForUpdates().catch((err) => {
-            log.error('No se pudo verificar actualizaciones', err)
-          })
-        },
-        4 * 60 * 60 * 1000
-      )
+      setInterval(() => {
+        void runBackgroundUpdateCheck()
+      }, 4 * 60 * 60 * 1000)
     }
   })
 }
-
-autoUpdater.on('update-available', (info: UpdateInfo) => {
-  win?.webContents.send('zion-update-available', serializarUpdateInfo(info))
-})
-
-autoUpdater.on('download-progress', (progress: ProgressInfo) => {
-  win?.webContents.send('zion-update-progress', {
-    percent: progress.percent,
-    bytesPerSecond: progress.bytesPerSecond,
-    transferred: progress.transferred,
-    total: progress.total,
-  })
-})
-
-autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
-  win?.webContents.send('zion-update-downloaded', serializarUpdateInfo(info))
-})
-
-autoUpdater.on('error', (err) => {
-  log.error('Error en el auto-updater', err)
-  win?.webContents.send('zion-update-error', 'No se pudo comprobar si hay actualizaciones disponibles.')
-})
