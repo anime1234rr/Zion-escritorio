@@ -8,6 +8,7 @@ export interface StaffCaps {
   esStaff: boolean
   canGestionarSanciones: boolean
   canVerHistorial: boolean
+  canGestionarExplorar: boolean
 }
 
 interface StaffRoleEntry {
@@ -26,6 +27,7 @@ const DEFAULT_CAPS: StaffCaps = {
   esStaff: false,
   canGestionarSanciones: false,
   canVerHistorial: false,
+  canGestionarExplorar: false,
 }
 
 export function useStaffCaps(userId: string | undefined): StaffCaps {
@@ -56,6 +58,7 @@ export function useStaffCaps(userId: string | undefined): StaffCaps {
           esStaff: data.es_admin || roles.length > 0,
           canGestionarSanciones: tienePermiso('gestionar_sanciones'),
           canVerHistorial: tienePermiso('ver_historial_sanciones'),
+          canGestionarExplorar: tienePermiso('gestionar_explorar'),
         })
       })
 

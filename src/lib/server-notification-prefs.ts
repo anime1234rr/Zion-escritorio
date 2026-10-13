@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
+import { supabase } from '@/lib/supabase'
+
 export type ServerAlertLevel = 'todas' | 'menciones' | 'nada'
 export type ChannelAlertLevel = ServerAlertLevel | 'heredar'
 
@@ -87,6 +89,59 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
+async function usuarioActual(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession()
+  return data.session?.user.id ?? null
+}
+
+async function sincronizarServidor(serverId: string): Promise<void> {
+  const usuarioId = await usuarioActual()
+  if (!usuarioId) return
+  const pref = serverPrefs[serverId]
+  if (!pref) {
+    await supabase
+      .from('preferencias_notificacion_servidor')
+      .delete()
+      .eq('usuario_id', usuarioId)
+      .eq('servidor_id', serverId)
+    return
+  }
+  await supabase.from('preferencias_notificacion_servidor').upsert({
+    usuario_id: usuarioId,
+    servidor_id: serverId,
+    nivel: pref.level,
+    silenciado: pref.muted,
+    actualizado_at: new Date().toISOString(),
+  })
+}
+
+async function sincronizarCanal(channelId: string): Promise<void> {
+  const usuarioId = await usuarioActual()
+  if (!usuarioId) return
+  const nivel = channelPrefs[channelId]
+  if (!nivel || nivel === 'heredar') {
+    await supabase
+      .from('preferencias_notificacion_canal')
+      .delete()
+      .eq('usuario_id', usuarioId)
+      .eq('canal_id', channelId)
+    return
+  }
+  await supabase.from('preferencias_notificacion_canal').upsert({
+    usuario_id: usuarioId,
+    canal_id: channelId,
+    nivel,
+    actualizado_at: new Date().toISOString(),
+  })
+}
+
+export async function sincronizarPreferenciasNotificacion(): Promise<void> {
+  await Promise.all([
+    ...Object.keys(serverPrefs).map((id) => sincronizarServidor(id).catch(() => {})),
+    ...Object.keys(channelPrefs).map((id) => sincronizarCanal(id).catch(() => {})),
+  ])
+}
+
 export function getServerNotifPref(serverId: string): ServerNotifPref {
   return serverPrefs[serverId] ?? DEFAULT_SERVER_NOTIF_PREF
 }
@@ -94,11 +149,13 @@ export function getServerNotifPref(serverId: string): ServerNotifPref {
 export function setServerAlertLevel(serverId: string, level: ServerAlertLevel): void {
   serverPrefs = { ...serverPrefs, [serverId]: { ...getServerNotifPref(serverId), level } }
   persistServer()
+  void sincronizarServidor(serverId).catch(() => {})
 }
 
 export function setServerMuted(serverId: string, muted: boolean): void {
   serverPrefs = { ...serverPrefs, [serverId]: { ...getServerNotifPref(serverId), muted } }
   persistServer()
+  void sincronizarServidor(serverId).catch(() => {})
 }
 
 export function toggleServerMuted(serverId: string): void {
@@ -111,6 +168,7 @@ export function olvidarServerNotifPref(serverId: string): void {
   delete next[serverId]
   serverPrefs = next
   persistServer()
+  void sincronizarServidor(serverId).catch(() => {})
 }
 
 export function getChannelNotifLevel(channelId: string): ChannelAlertLevel {
@@ -124,6 +182,7 @@ export function setChannelNotifLevel(channelId: string, level: ChannelAlertLevel
   }
   channelPrefs = { ...channelPrefs, [channelId]: level }
   persistChannel()
+  void sincronizarCanal(channelId).catch(() => {})
 }
 
 export function olvidarChannelNotifPref(channelId: string): void {
@@ -132,6 +191,7 @@ export function olvidarChannelNotifPref(channelId: string): void {
   delete next[channelId]
   channelPrefs = next
   persistChannel()
+  void sincronizarCanal(channelId).catch(() => {})
 }
 
 function nivelPermiteTipo(level: ServerAlertLevel, tipo: string): boolean {

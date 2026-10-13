@@ -1,4 +1,3 @@
-// A
 import {
   app,
   BrowserWindow,
@@ -173,11 +172,30 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      webviewTag: false,
     },
   })
 
   win.once('ready-to-show', () => {
     win?.show()
+  })
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (URL.canParse(url) && new URL(url).protocol === 'https:') shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
+  win.webContents.on('will-navigate', (event, url) => {
+    const interna = VITE_DEV_SERVER_URL ? url.startsWith(VITE_DEV_SERVER_URL) : url.startsWith('file://')
+    if (interna) return
+    event.preventDefault()
+    if (URL.canParse(url) && new URL(url).protocol === 'https:') shell.openExternal(url)
+  })
+
+  win.webContents.on('will-attach-webview', (event) => {
+    event.preventDefault()
   })
 
   win.webContents.on('devtools-opened', () => {

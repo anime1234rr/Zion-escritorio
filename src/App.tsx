@@ -9,13 +9,16 @@ import { useInspectUnlock } from '@/hooks/use-inspect-unlock'
 import { useChannelAccess } from '@/hooks/use-channel-access'
 import { useRolePreview } from '@/hooks/use-role-preview'
 import { cn } from '@/lib/utils'
-import { actualizarPerfil, obtenerPerfil } from '@/lib/profiles'
+import { actualizarPerfil, mapPerfilPropio, obtenerMiPerfil } from '@/lib/profiles'
 import { aplicarFondoLocalSiCorresponde } from '@/lib/local-background'
 import {
   iniciarHeartbeat,
   marcarConectado,
   marcarDesconectadoPorCierre,
   marcarDesconectadoPorCierreAwait,
+  iniciarPresenciaDispositivo,
+  suscribirseAMiPerfil,
+  type PresenciaDispositivo,
 } from '@/lib/presence'
 import {
   listarServidores,
@@ -34,7 +37,7 @@ import {
 } from '@/lib/read-state'
 import { mensajeErrorAutomod } from '@/lib/automod'
 import { mensajeErrorSancion } from '@/lib/moderation'
-import { debeAlertarNotificacion } from '@/lib/server-notification-prefs'
+import { debeAlertarNotificacion, sincronizarPreferenciasNotificacion } from '@/lib/server-notification-prefs'
 import { pushToast } from '@/hooks/use-toasts'
 import { updateAppBadge } from '@/lib/badge'
 import { leaveVoiceChannel, toggleDeafen, toggleMute, useVoiceConnection } from '@/hooks/use-voice-connection'
@@ -73,6 +76,7 @@ import type {
 import type { ServerRole } from '@/lib/members'
 
 import { AuthScreen } from '@/components/AuthScreen'
+import { MfaChallengeStep } from '@/components/auth/MfaChallengeStep'
 import { MaintenanceScreen } from '@/components/MaintenanceScreen'
 import { AccountStatusScreen } from '@/components/AccountStatusScreen'
 import { SancionNoticeDialog } from '@/components/SancionNoticeDialog'
@@ -255,6 +259,10 @@ function AppShell({ userId }: { userId: string }) {
   }
 
   useEffect(() => {
+    sincronizarPreferenciasNotificacion().catch(() => {})
+  }, [userId])
+
+  useEffect(() => {
     return onNotificationClicked((id) => {
       notificationClickHandlers.current.get(id)?.()
       notificationClickHandlers.current.delete(id)
@@ -341,27 +349,47 @@ function AppShell({ userId }: { userId: string }) {
     }
   }, [userId])
 
+  const dispositivoRef = useRef<PresenciaDispositivo | null>(null)
+
   useEffect(() => {
     let cancelado = false
     marcarConectado()
       .catch((err) => console.error('No se pudo marcar como conectado', err))
       .finally(() => {
         if (cancelado) return
-        obtenerPerfil(userId)
+        obtenerMiPerfil(userId)
           .then((data) => !cancelado && setProfile(aplicarFondoLocalSiCorresponde(data)))
           .catch((err) => console.error('No se pudo cargar el perfil', err))
       })
 
     const detenerHeartbeat = iniciarHeartbeat()
+    const dispositivo = iniciarPresenciaDispositivo(userId)
+    dispositivoRef.current = dispositivo
+
+    const dejarDeEscuchar = suscribirseAMiPerfil(userId, (row) => {
+      if (row.estado === 'desconectado_cierre') {
+        marcarConectado().catch((err) => console.error('No se pudo marcar como conectado', err))
+      }
+      const actualizado = mapPerfilPropio(row)
+      setProfile((prev) =>
+        prev
+          ? { ...prev, name: actualizado.name, avatarUrl: actualizado.avatarUrl, status: actualizado.status }
+          : prev
+      )
+    })
 
     return () => {
       cancelado = true
       detenerHeartbeat()
+      dejarDeEscuchar()
+      dispositivo.detener()
+      if (dispositivoRef.current === dispositivo) dispositivoRef.current = null
     }
   }, [userId])
 
   useEffect(() => {
     function handleBeforeUnload() {
+      if (dispositivoRef.current?.hayOtrosDispositivos()) return
       if (session?.access_token) {
         marcarDesconectadoPorCierre(session.access_token)
       }
@@ -372,7 +400,11 @@ function AppShell({ userId }: { userId: string }) {
 
   useEffect(() => {
     return onBeforeQuit(() => {
-      Promise.allSettled([marcarDesconectadoPorCierreAwait(), leaveVoiceChannel()])
+      const otrosAbiertos = dispositivoRef.current?.hayOtrosDispositivos() ?? false
+      Promise.allSettled([
+        otrosAbiertos ? Promise.resolve() : marcarDesconectadoPorCierreAwait(),
+        leaveVoiceChannel(),
+      ])
         .then(([estadoResult]) => {
           if (estadoResult.status === 'rejected') {
             console.error('No se pudo marcar como desconectado', estadoResult.reason)
@@ -742,7 +774,9 @@ function AppShell({ userId }: { userId: string }) {
         onOpenStaffPanel={() => setStaffPanelOpen(true)}
       />
 
-      <StaffPanelDialog open={staffPanelOpen} onOpenChange={setStaffPanelOpen} esAdmin={staffCaps.esAdmin} />
+      <StaffPanelDialog open={staffPanelOpen} onOpenChange={setStaffPanelOpen} esAdmin={staffCaps.esAdmin}
+        puedeExplorar={staffCaps.canGestionarExplorar}
+      />
 
       {view === 'dm' ? (
         <VistaInicio
@@ -757,6 +791,8 @@ function AppShell({ userId }: { userId: string }) {
         />
       ) : view === 'explore' ? (
         <VistaExplorar
+          currentUserId={userId}
+          onMessageUser={handleMessageUser}
           onJoined={(servidor) => {
             setServers((prev) => upsertServer(prev, servidor))
             handleSelectServer(servidor.id)
@@ -934,7 +970,7 @@ function AppShell({ userId }: { userId: string }) {
 }
 
 function App() {
-  const { user, loading, pendingAuthAction, signOut } = useAuth()
+  const { user, loading, pendingAuthAction, mfaRequired, signOut } = useAuth()
   const { isMaintenance, bypass } = useSystemStatus(user?.id)
   const {
     activeBan,
@@ -961,6 +997,8 @@ function App() {
         </div>
       ) : !user || pendingAuthAction ? (
         <AuthScreen />
+      ) : mfaRequired ? (
+        <MfaChallengeStep />
       ) : isMaintenance ? (
         <MaintenanceScreen />
       ) : activeBan ? (

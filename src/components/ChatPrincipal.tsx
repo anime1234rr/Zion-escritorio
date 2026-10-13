@@ -44,7 +44,6 @@ import {
   type ServerRole,
 } from '@/lib/members'
 import type { ChannelThread } from '@/lib/threads'
-import { crearNotificacionMencion } from '@/lib/notifications'
 import { tieneAlgunComandoDeSlash } from '@/lib/slash-commands'
 import { useMessageActions } from '@/hooks/use-message-actions'
 import { useServerPermissions } from '@/hooks/use-server-permissions'
@@ -802,39 +801,10 @@ export function ChatPrincipal({
       setUploading(false)
     }
 
-    Promise.resolve(
-      onSendMessage({ ...parseFencedCode(draft), attachment, respuestaAId: replyingTo?.id })
-    ).then((nuevo) => notificarMencionados(draft, nuevo?.id))
+    onSendMessage({ ...parseFencedCode(draft), attachment, respuestaAId: replyingTo?.id })
     setDraft('')
     setPendingFile(null)
     setPendingVoiceBlob(null)
-  }
-
-  function notificarMencionados(contenido: string, mensajeId?: string) {
-    const mencionados = new Set<string>()
-    const mentionPattern = /@([a-zA-Z0-9_]{1,32})/g
-    let match: RegExpExecArray | null
-    while ((match = mentionPattern.exec(contenido))) {
-      mencionados.add(match[1].toLowerCase())
-    }
-    if (mencionados.size === 0) return
-
-    const remitente = mentionableMembers.find((m) => m.id === currentUserId)
-    const titulo = `${remitente?.displayName ?? 'Alguien'} te mencionó en #${channel.name}`
-    const preview = contenido.trim().slice(0, 120)
-    const enlace = mensajeId ? buildChannelMessageLink(server.id, channel.id, mensajeId) : null
-
-    for (const member of mentionableMembers) {
-      if (member.id === currentUserId) continue
-      if (!mencionados.has(member.username.toLowerCase())) continue
-      crearNotificacionMencion({
-        usuarioId: member.id,
-        servidorId: server.id,
-        titulo,
-        mensaje: preview,
-        enlace,
-      }).catch((err) => console.error('No se pudo notificar la mención', err))
-    }
   }
 
   useEffect(() => {

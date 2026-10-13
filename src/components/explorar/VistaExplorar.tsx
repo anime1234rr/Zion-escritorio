@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Compass, Loader2, Search, Telescope } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Compass, Loader2, Search, Server, Telescope, Users } from 'lucide-react'
 
 import { explorarComunidades, type CommunityListing } from '@/lib/explore'
 import { unirseAServidor } from '@/lib/servers'
+import { suscribirseAExplorar } from '@/lib/realtime-avisos'
 import type { ServerItem } from '@/lib/types'
 import { cn, getErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -10,11 +11,16 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { pushToast } from '@/hooks/use-toasts'
 import { CommunityCard } from '@/components/explorar/CommunityCard'
+import { PersonasExplorar } from '@/components/explorar/PersonasExplorar'
 
 interface VistaExplorarProps {
+  currentUserId: string
   onJoined: (server: ServerItem) => void
   onOpenServer: (serverId: string) => void
+  onMessageUser: (userId: string) => void
 }
+
+type Modo = 'servidores' | 'personas'
 
 const CATEGORIAS: { id: string; label: string; palabras: string[] }[] = [
   { id: 'todos', label: 'Todos', palabras: [] },
@@ -66,13 +72,30 @@ function coincideCategoria(comunidad: CommunityListing, categoriaId: string) {
   return cat.palabras.some((palabra) => heno.includes(normalizar(palabra)))
 }
 
-export function VistaExplorar({ onJoined, onOpenServer }: VistaExplorarProps) {
+export function VistaExplorar({ currentUserId, onJoined, onOpenServer, onMessageUser }: VistaExplorarProps) {
+  const [modo, setModo] = useState<Modo>('servidores')
   const [query, setQuery] = useState('')
+  const [queryPersonas, setQueryPersonas] = useState('')
   const [categoria, setCategoria] = useState('todos')
   const [comunidades, setComunidades] = useState<CommunityListing[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uniendo, setUniendo] = useState<string | null>(null)
+  const queryRef = useRef(query)
+
+  useEffect(() => {
+    queryRef.current = query
+  }, [query])
+
+  useEffect(
+    () =>
+      suscribirseAExplorar(() => {
+        explorarComunidades(queryRef.current)
+          .then(setComunidades)
+          .catch(() => {})
+      }),
+    []
+  )
 
   useEffect(() => {
     let cancelado = false
@@ -138,44 +161,88 @@ export function VistaExplorar({ onJoined, onOpenServer }: VistaExplorarProps) {
   return (
     <div className="flex h-full flex-1 flex-col bg-background">
       <header className="flex shrink-0 flex-col gap-3 border-b border-border px-6 py-4">
-        <div className="flex items-center gap-2">
-          <Compass className="size-5 text-primary" />
-          <h1 className="text-base font-semibold">Explorar comunidades</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Compass className="size-5 text-primary" />
+            <h1 className="text-base font-semibold">Explorar</h1>
+          </div>
+          <div className="flex gap-1 rounded-lg border border-border bg-muted/30 p-1">
+            {(
+              [
+                ['servidores', 'Servidores', Server],
+                ['personas', 'Personas', Users],
+              ] as const
+            ).map(([valor, label, Icon]) => (
+              <button
+                key={valor}
+                type="button"
+                onClick={() => setModo(valor)}
+                aria-pressed={modo === valor}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50',
+                  modo === valor
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Icon className="size-4" />
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="relative max-w-md">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            autoFocus
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar comunidades por nombre o tema"
-            className="pl-8"
-          />
+          {modo === 'servidores' ? (
+            <Input
+              autoFocus
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar comunidades por nombre o tema"
+              className="pl-8"
+            />
+          ) : (
+            <Input
+              autoFocus
+              value={queryPersonas}
+              onChange={(event) => setQueryPersonas(event.target.value)}
+              placeholder="Buscar personas por nombre"
+              className="pl-8"
+            />
+          )}
         </div>
 
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-          {CATEGORIAS.map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => setCategoria(cat.id)}
-              className={cn(
-                'shrink-0 rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50',
-                categoria === cat.id
-                  ? 'border-primary bg-primary/10 text-foreground'
-                  : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
-              )}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
+        {modo === 'servidores' && (
+          <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+            {CATEGORIAS.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setCategoria(cat.id)}
+                className={cn(
+                  'shrink-0 rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50',
+                  categoria === cat.id
+                    ? 'border-primary bg-primary/10 text-foreground'
+                    : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-6 py-5">
-          {cargando ? (
+          {modo === 'personas' ? (
+            <PersonasExplorar
+              query={queryPersonas}
+              currentUserId={currentUserId}
+              onMessageUser={onMessageUser}
+            />
+          ) : cargando ? (
             <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
               Buscando comunidades…

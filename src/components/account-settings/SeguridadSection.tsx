@@ -7,6 +7,7 @@ import {
   type SecurityNotificationPrefs,
 } from '@/lib/profiles'
 import {
+  avisarCambioMfa,
   confirmarEnrolamientoMfa,
   iniciarEnrolamientoMfa,
   listarFactoresMfa,
@@ -170,13 +171,15 @@ export function SeguridadSection({ userId }: SeguridadSectionProps) {
 
   useEffect(() => {
     cargarMfa()
+    window.addEventListener('focus', cargarMfa)
+    return () => window.removeEventListener('focus', cargarMfa)
   }, [cargarMfa])
 
   async function empezarMfa() {
     setMfaError(null)
     setMfaBusy(true)
     try {
-      setEnrolling(await iniciarEnrolamientoMfa('Zion escritorio'))
+      setEnrolling(await iniciarEnrolamientoMfa('App de autenticación'))
       setMfaCode('')
     } catch (err) {
       setMfaError(getErrorMessage(err))
@@ -202,6 +205,7 @@ export function SeguridadSection({ userId }: SeguridadSectionProps) {
       await confirmarEnrolamientoMfa(enrolling.factorId, mfaCode)
       setEnrolling(null)
       cargarMfa()
+      avisarCambioMfa()
     } catch (err) {
       setMfaError(getErrorMessage(err))
     } finally {
@@ -213,6 +217,7 @@ export function SeguridadSection({ userId }: SeguridadSectionProps) {
     try {
       await quitarFactorMfa(factor.id)
       cargarMfa()
+      avisarCambioMfa()
     } catch (err) {
       setMfaError(getErrorMessage(err))
     }

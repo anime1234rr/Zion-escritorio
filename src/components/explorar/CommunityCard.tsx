@@ -1,4 +1,4 @@
-import { Check, Loader2, Users } from 'lucide-react'
+import { Check, Loader2, Sparkles, Users } from 'lucide-react'
 
 import type { CommunityListing } from '@/lib/explore'
 import { cn } from '@/lib/utils'
@@ -58,7 +58,15 @@ export function CommunityCard({ community, joining, onAction }: CommunityCardPro
         </div>
 
         <div className="flex flex-1 flex-col gap-1">
-          <h2 className="truncate text-sm font-semibold text-foreground">{community.name}</h2>
+          <div className="flex items-center gap-1.5">
+            <h2 className="truncate text-sm font-semibold text-foreground">{community.name}</h2>
+            {community.featured && (
+              <span className="flex shrink-0 items-center gap-0.5 rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                <Sparkles className="size-3" />
+                Destacado
+              </span>
+            )}
+          </div>
           <p className="line-clamp-2 min-h-8 text-xs leading-relaxed text-muted-foreground">
             {community.description?.trim() || 'Esta comunidad todavía no tiene descripción.'}
           </p>

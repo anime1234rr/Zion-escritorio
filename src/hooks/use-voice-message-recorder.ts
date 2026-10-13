@@ -1,10 +1,12 @@
 import { useCallback, useRef, useState } from 'react'
 
 const CANDIDATE_MIME_TYPES = [
+  'audio/mp4;codecs=mp4a.40.2',
+  'audio/mp4;codecs=opus',
+  'audio/mp4',
   'audio/webm;codecs=opus',
   'audio/webm',
   'audio/ogg;codecs=opus',
-  'audio/mp4',
 ]
 
 function pickSupportedMimeType(): string | undefined {

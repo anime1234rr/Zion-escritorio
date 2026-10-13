@@ -227,12 +227,12 @@ export async function listarRolesStaffUsuario(usuarioId: string): Promise<RolSta
 export async function asignarRolStaff(
   usuarioId: string,
   tipo: TipoRolStaff,
-  permisos: Record<string, boolean>
+  permisos?: Record<string, boolean>
 ): Promise<void> {
   const { error } = await supabase.rpc('asignar_rol_staff', {
     p_usuario_id: usuarioId,
     p_tipo: tipo,
-    p_permisos: permisos,
+    p_permisos: permisos ?? null,
   })
   if (error) throw error
 }

@@ -60,6 +60,7 @@ function RolStaffForm({
   const [tipo, setTipo] = useState<TipoRolStaff>('moderador')
   const [gestionarSanciones, setGestionarSanciones] = useState(true)
   const [verHistorial, setVerHistorial] = useState(true)
+  const [gestionarExplorar, setGestionarExplorar] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -68,6 +69,7 @@ function RolStaffForm({
     const esModerador = opcion === 'moderador'
     setGestionarSanciones(esModerador)
     setVerHistorial(esModerador)
+    setGestionarExplorar(false)
   }
 
   useEffect(() => {
@@ -91,6 +93,7 @@ function RolStaffForm({
       await asignarRolStaff(target.targetUserId, tipo, {
         gestionar_sanciones: gestionarSanciones,
         ver_historial_sanciones: verHistorial,
+        gestionar_explorar: gestionarExplorar,
       })
       await recargar()
       onChanged()
@@ -176,6 +179,10 @@ function RolStaffForm({
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm text-foreground">Puede ver el historial de sanciones</span>
           <Switch checked={verHistorial} onCheckedChange={setVerHistorial} />
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm text-foreground">Puede gestionar Explorar</span>
+          <Switch checked={gestionarExplorar} onCheckedChange={setGestionarExplorar} />
         </div>
         <p className="text-xs text-muted-foreground">
           Los roles de desarrollo no incluyen moderación por defecto. Activá estos switches solo si

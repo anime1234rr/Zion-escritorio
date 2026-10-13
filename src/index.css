@@ -5,9 +5,6 @@
 
 @custom-variant light (&:is(.light *));
 
-/* Oscuro por defecto, identidad propia (nada de grises de Discord) —
-   el "modo claro" queda como override opcional bajo .light para un
-   futuro selector de tema. */
 :root {
   --radius: 0.625rem;
   --background-solid: #0f1117;
@@ -48,9 +45,6 @@
   --online: #22c55e;
   --idle: #eab308;
   --dnd: #ef4444;
-  /* Derivados de --foreground (no de un color fijo): siguen
-     automáticamente cualquier cambio de tono/tema, incluido .light —
-     var() se resuelve con el --foreground vigente en cada contexto. */
   --scrollbar-thumb: color-mix(in srgb, var(--foreground) 22%, transparent);
   --scrollbar-thumb-hover: color-mix(in srgb, var(--foreground) 38%, transparent);
 }
@@ -208,14 +202,6 @@ body {
   }
 }
 
-/*
- * Scrollbar temeada globalmente: track transparente (deja ver lo que
- * haya atrás — color sólido, degradado o imagen de fondo) + thumb
- * derivado de --foreground. Se aplica a *cualquier* elemento con
- * overflow, no solo a los que ya usan <ScrollArea> — así un scroll
- * nuevo agregado con un simple overflow-auto también queda del mismo
- * tema sin tener que acordarse de nada.
- */
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;

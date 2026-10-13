@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ImagePlus } from 'lucide-react'
+import { Eye, ImagePlus } from 'lucide-react'
 
 import { useAuth } from '@/hooks/use-auth'
 import { crearServidor } from '@/lib/servers'
@@ -9,6 +9,7 @@ import { cn, getErrorMessage } from '@/lib/utils'
 import type { ServerItem } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { PlantillaPreview } from '@/components/PlantillaPreview'
+import { PlantillaServidorPreview } from '@/components/PlantillaServidorPreview'
 import {
   Dialog,
   DialogContent,
@@ -39,6 +40,7 @@ export function CrearServidorDialog({
   const [plantillaId, setPlantillaId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [previewing, setPreviewing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -64,6 +66,7 @@ export function CrearServidorDialog({
 
   function resetForm() {
     setNombre('')
+    setPreviewing(false)
     setIconFile(null)
     setIconPreview((prev) => {
       if (prev) URL.revokeObjectURL(prev)
@@ -71,9 +74,13 @@ export function CrearServidorDialog({
     })
   }
 
-  async function handleSubmit(event: React.FormEvent) {
+  function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    if (!nombre.trim() || !user) return
+    crear(nombre)
+  }
+
+  async function crear(nombreFinal: string) {
+    if (!nombreFinal.trim() || !user) return
 
     setLoading(true)
     setError(null)
@@ -82,7 +89,7 @@ export function CrearServidorDialog({
         ? await subirIconoServidor(user.id, iconFile)
         : undefined
       const servidor = await crearServidor(
-        nombre,
+        nombreFinal,
         iconoUrl,
         plantillaId ?? undefined
       )
@@ -91,6 +98,7 @@ export function CrearServidorDialog({
       onOpenChange(false)
     } catch (err) {
       setError(getErrorMessage(err))
+      setPreviewing(false)
     } finally {
       setLoading(false)
     }
@@ -103,120 +111,148 @@ export function CrearServidorDialog({
         if (!loading) onOpenChange(next)
       }}
     >
-      <DialogContent className="sm:max-w-2xl">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>Crear servidor</DialogTitle>
-            <DialogDescription>
-              Elegí una plantilla: define los canales con los que arranca tu
-              servidor. Los roles los creás vos después, desde
-              Configuración &gt; Personas.
-            </DialogDescription>
-          </DialogHeader>
+      <DialogContent
+        showCloseButton={!previewing}
+        className={cn(
+          previewing ? 'h-[88vh] w-[95vw] max-w-none p-0 sm:max-w-6xl' : 'sm:max-w-2xl'
+        )}
+      >
+        {previewing && plantillaSeleccionada ? (
+          <PlantillaServidorPreview
+            plantilla={plantillaSeleccionada}
+            nombreServidor={nombre}
+            iconoUrl={iconPreview}
+            creating={loading}
+            onBack={() => setPreviewing(false)}
+            onCreate={() => crear(nombre.trim() || plantillaSeleccionada.nombre)}
+          />
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <DialogHeader>
+              <DialogTitle>Crear servidor</DialogTitle>
+              <DialogDescription>
+                Elegí una plantilla: define los canales con los que arranca tu
+                servidor. Los roles los creás vos después, desde
+                Configuración &gt; Personas.
+              </DialogDescription>
+            </DialogHeader>
 
-          <div className="mt-4 flex items-center gap-4">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={ICONO_SERVIDOR_ACCEPT}
-              className="hidden"
-              onChange={handlePickIcon}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className={cn(
-                'flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-dashed border-border bg-muted/40 text-muted-foreground outline-none hover:border-solid hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50'
-              )}
-            >
-              {iconPreview ? (
-                <img
-                  src={iconPreview}
-                  alt=""
-                  className="size-full object-cover"
-                />
-              ) : (
-                <ImagePlus className="size-5" />
-              )}
-            </button>
-            <div className="flex-1">
-              <Label htmlFor="nombre_servidor">Nombre del servidor</Label>
-              <Input
-                id="nombre_servidor"
-                value={nombre}
-                onChange={(event) => setNombre(event.target.value)}
-                placeholder="Mi comunidad"
-                autoFocus
-                required
-                className="mt-1.5"
+            <div className="mt-4 flex items-center gap-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ICONO_SERVIDOR_ACCEPT}
+                className="hidden"
+                onChange={handlePickIcon}
               />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className={cn(
+                  'flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-dashed border-border bg-muted/40 text-muted-foreground outline-none hover:border-solid hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50'
+                )}
+              >
+                {iconPreview ? (
+                  <img
+                    src={iconPreview}
+                    alt=""
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <ImagePlus className="size-5" />
+                )}
+              </button>
+              <div className="flex-1">
+                <Label htmlFor="nombre_servidor">Nombre del servidor</Label>
+                <Input
+                  id="nombre_servidor"
+                  value={nombre}
+                  onChange={(event) => setNombre(event.target.value)}
+                  placeholder="Mi comunidad"
+                  autoFocus
+                  required
+                  className="mt-1.5"
+                />
+              </div>
             </div>
-          </div>
 
-          {plantillas.length > 0 && (
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label>Plantilla</Label>
-                <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
-                  {plantillas.map((plantilla) => (
-                    <button
-                      key={plantilla.id}
-                      type="button"
-                      onClick={() => setPlantillaId(plantilla.id)}
-                      aria-pressed={plantillaId === plantilla.id}
-                      className={cn(
-                        'flex items-start gap-2.5 rounded-lg border border-border px-3 py-2 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50',
-                        plantillaId === plantilla.id &&
-                          'border-primary bg-primary/10'
-                      )}
-                    >
-                      {plantilla.iconoDefecto && (
-                        <span className="mt-0.5 text-base leading-none" aria-hidden>
-                          {plantilla.iconoDefecto}
-                        </span>
-                      )}
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium text-foreground">
-                          {plantilla.nombre}
-                        </span>
-                        {plantilla.descripcion && (
-                          <span className="block text-xs text-muted-foreground">
-                            {plantilla.descripcion}
+            {plantillas.length > 0 && (
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label>Plantilla</Label>
+                  <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+                    {plantillas.map((plantilla) => (
+                      <button
+                        key={plantilla.id}
+                        type="button"
+                        onClick={() => setPlantillaId(plantilla.id)}
+                        aria-pressed={plantillaId === plantilla.id}
+                        className={cn(
+                          'flex items-start gap-2.5 rounded-lg border border-border px-3 py-2 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50',
+                          plantillaId === plantilla.id &&
+                            'border-primary bg-primary/10'
+                        )}
+                      >
+                        {plantilla.iconoDefecto && (
+                          <span className="mt-0.5 text-base leading-none" aria-hidden>
+                            {plantilla.iconoDefecto}
                           </span>
                         )}
-                      </span>
-                    </button>
-                  ))}
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium text-foreground">
+                            {plantilla.nombre}
+                          </span>
+                          {plantilla.descripcion && (
+                            <span className="block text-xs text-muted-foreground">
+                              {plantilla.descripcion}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label>Así arranca tu servidor</Label>
+                  <div className="max-h-72 overflow-y-auto rounded-lg border border-border bg-muted/20 p-3">
+                    {plantillaSeleccionada ? (
+                      <>
+                        <PlantillaPreview plantilla={plantillaSeleccionada} />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-3 w-full"
+                          onClick={() => setPreviewing(true)}
+                        >
+                          <Eye className="size-4" />
+                          Ver el servidor por dentro
+                        </Button>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Elegí una plantilla para ver sus canales.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
+            )}
 
-              <div className="flex flex-col gap-1.5">
-                <Label>Así arranca tu servidor</Label>
-                <div className="max-h-72 overflow-y-auto rounded-lg border border-border bg-muted/20 p-3">
-                  {plantillaSeleccionada ? (
-                    <PlantillaPreview plantilla={plantillaSeleccionada} />
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Elegí una plantilla para ver sus canales.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+            {error && (
+              <p className="mt-2 text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            )}
 
-          {error && (
-            <p className="mt-2 text-sm text-destructive" role="alert">
-              {error}
-            </p>
-          )}
-
-          <DialogFooter>
-            <Button type="submit" disabled={loading || !nombre.trim()}>
-              {loading ? 'Creando…' : 'Crear servidor'}
-            </Button>
-          </DialogFooter>
-        </form>
+            <DialogFooter>
+              <Button type="submit" disabled={loading || !nombre.trim()}>
+                {loading ? 'Creando…' : 'Crear servidor'}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   )

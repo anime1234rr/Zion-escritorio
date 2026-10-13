@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { Check, Crown, MessageSquare, Plus, UserPlus, X } from 'lucide-react'
+import { Check, Crown, Flag, MessageSquare, Plus, UserPlus, X } from 'lucide-react'
 
 import {
   aceptarSolicitudAmistad,
@@ -15,6 +15,7 @@ import {
 } from '@/lib/members'
 import { obtenerPerfilPublico, type PublicProfile } from '@/lib/profiles'
 import { UserBadges } from '@/components/UserBadges'
+import { ReportarUsuarioDialog } from '@/components/ReportarUsuarioDialog'
 import { ErrorBoundary } from '@/lib/internal/perf-metrics'
 import { parseBioRichText } from '@/lib/bio-format'
 import { cn, getErrorMessage } from '@/lib/utils'
@@ -70,6 +71,7 @@ export function UserProfileCard({
 }: UserProfileCardProps) {
   const [open, setOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
   const [profile, setProfile] = useState<PublicProfile | null>(null)
   const [membresia, setMembresia] = useState<{
     membershipId: string
@@ -445,6 +447,17 @@ export function UserProfileCard({
                           {friendRequestError}
                         </p>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReportOpen(true)
+                          setOpen(false)
+                        }}
+                        className="mt-1 flex items-center justify-center gap-1.5 self-center rounded-md px-2 py-1 text-xs text-muted-foreground outline-none hover:text-destructive focus-visible:ring-3 focus-visible:ring-ring/50"
+                      >
+                        <Flag className="size-3.5" />
+                        Reportar usuario
+                      </button>
                     </div>
                   )}
                 </div>
@@ -454,6 +467,15 @@ export function UserProfileCard({
           )}
         </PopoverContent>
       </Popover>
+
+      {!isOwnProfile && profile && (
+        <ReportarUsuarioDialog
+          open={reportOpen}
+          onOpenChange={setReportOpen}
+          usuarioId={userId}
+          usuarioNombre={profile.nombreCompleto || profile.nombreUsuario}
+        />
+      )}
 
       {isOwnProfile && profile && (
         <Suspense fallback={null}>

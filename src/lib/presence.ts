@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import type { PerfilRow } from '@/lib/profiles'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string
@@ -40,4 +41,55 @@ export function iniciarHeartbeat(): () => void {
   }, HEARTBEAT_INTERVAL_MS)
 
   return () => clearInterval(interval)
+}
+
+export interface PresenciaDispositivo {
+  hayOtrosDispositivos: () => boolean
+  pausar: () => void
+  reanudar: () => void
+  detener: () => void
+}
+
+export function iniciarPresenciaDispositivo(userId: string): PresenciaDispositivo {
+  const deviceId = crypto.randomUUID()
+  let activo = true
+  const channel = supabase.channel(`dispositivos-${userId}`, {
+    config: { presence: { key: deviceId } },
+  })
+
+  channel.subscribe((status) => {
+    if (status === 'SUBSCRIBED' && activo) channel.track({ plataforma: 'escritorio' }).catch(() => {})
+  })
+
+  return {
+    hayOtrosDispositivos: () =>
+      Object.keys(channel.presenceState()).some((key) => key !== deviceId),
+    pausar: () => {
+      activo = false
+      channel.untrack().catch(() => {})
+    },
+    reanudar: () => {
+      activo = true
+      channel.track({ plataforma: 'escritorio' }).catch(() => {})
+    },
+    detener: () => {
+      activo = false
+      supabase.removeChannel(channel)
+    },
+  }
+}
+
+export function suscribirseAMiPerfil(userId: string, onCambio: (row: PerfilRow) => void): () => void {
+  const channel = supabase
+    .channel(`mi-perfil-${userId}-${crypto.randomUUID()}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'perfiles', filter: `id=eq.${userId}` },
+      (payload) => onCambio(payload.new as PerfilRow)
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
 }
