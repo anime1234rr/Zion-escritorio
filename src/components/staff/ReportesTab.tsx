@@ -352,7 +352,7 @@ function ReporteDetalle({
                   href={e.adjuntoUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-1 flex items-center gap-1 text-xs text-primary hover:underline"
+                  className="zion-link mt-1 flex items-center gap-1 text-xs text-primary hover:underline"
                 >
                   <Paperclip className="size-3" />
                   Ver adjunto{e.adjuntoTipo ? ` (${e.adjuntoTipo})` : ''}

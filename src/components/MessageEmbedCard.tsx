@@ -16,7 +16,7 @@ export function MessageEmbedCard({ embed }: { embed: MessageEmbed }) {
             <button
               type="button"
               onClick={() => openExternal(embed.url!)}
-              className="text-left text-sm font-semibold text-primary outline-none hover:underline"
+              className="zion-link text-left text-sm font-semibold text-primary outline-none hover:underline"
             >
               {embed.title}
             </button>

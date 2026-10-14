@@ -60,6 +60,32 @@ export function AccesibilidadSection() {
         />
       </div>
 
+      <div className="mt-3 flex items-center justify-between gap-4 rounded-lg border border-border p-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">Alto contraste</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Refuerza los bordes y los textos secundarios para que se distingan mejor.
+          </p>
+        </div>
+        <Switch
+          checked={settings.highContrast}
+          onCheckedChange={(checked) => setAccessibilitySetting('highContrast', checked)}
+        />
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-4 rounded-lg border border-border p-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">Subrayar enlaces</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Marca con subrayado los textos que abren un enlace.
+          </p>
+        </div>
+        <Switch
+          checked={settings.underlineLinks}
+          onCheckedChange={(checked) => setAccessibilitySetting('underlineLinks', checked)}
+        />
+      </div>
+
       <p className="mt-6 text-xs text-muted-foreground">
         Estas preferencias se guardan en este dispositivo, no en tu cuenta.
       </p>

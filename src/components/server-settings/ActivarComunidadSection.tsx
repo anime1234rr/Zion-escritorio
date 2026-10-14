@@ -3,9 +3,18 @@ import { Check, Rocket, X } from 'lucide-react'
 
 import { actualizarServidor, activarComunidad, desactivarComunidad } from '@/lib/servers'
 import { listarMiembros } from '@/lib/members'
+import {
+  asignarEtiquetaServidor,
+  listarEtiquetasDeServidor,
+  listarEtiquetasPopulares,
+  quitarEtiquetaServidor,
+  type EtiquetaPopular,
+} from '@/lib/explore'
 import { getErrorMessage } from '@/lib/utils'
 import type { ServerItem } from '@/lib/types'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ConfirmarAccionDialog } from '@/components/server-settings/ConfirmarAccionDialog'
@@ -13,6 +22,8 @@ import { ConfirmarAccionDialog } from '@/components/server-settings/ConfirmarAcc
 const DESCRIPCION_MAX = 300
 
 const MIEMBROS_MINIMOS = 10
+
+const MAX_ETIQUETAS = 5
 
 interface ActivarComunidadSectionProps {
   server: ServerItem
@@ -34,6 +45,10 @@ export function ActivarComunidadSection({ server, canEdit, onUpdated }: ActivarC
   const [descripcion, setDescripcion] = useState(server.description ?? '')
   const [descSeenId, setDescSeenId] = useState(server.id)
   const [guardandoDesc, setGuardandoDesc] = useState(false)
+  const [etiquetas, setEtiquetas] = useState<EtiquetaPopular[]>([])
+  const [etiquetasSugeridas, setEtiquetasSugeridas] = useState<EtiquetaPopular[]>([])
+  const [nuevaEtiqueta, setNuevaEtiqueta] = useState('')
+  const [guardandoEtiqueta, setGuardandoEtiqueta] = useState(false)
   if (descSeenId !== server.id) {
     setDescSeenId(server.id)
     setDescripcion(server.description ?? '')
@@ -48,6 +63,55 @@ export function ActivarComunidadSection({ server, canEdit, onUpdated }: ActivarC
       cancelado = true
     }
   }, [server.id])
+
+  useEffect(() => {
+    let cancelado = false
+    listarEtiquetasDeServidor(server.id)
+      .then((data) => !cancelado && setEtiquetas(data))
+      .catch(() => {})
+    return () => {
+      cancelado = true
+    }
+  }, [server.id])
+
+  useEffect(() => {
+    let cancelado = false
+    listarEtiquetasPopulares(20)
+      .then((data) => !cancelado && setEtiquetasSugeridas(data))
+      .catch(() => {})
+    return () => {
+      cancelado = true
+    }
+  }, [])
+
+  async function handleAgregarEtiqueta(nombre: string) {
+    const limpio = nombre.trim()
+    if (!limpio || etiquetas.length >= MAX_ETIQUETAS) return
+    setGuardandoEtiqueta(true)
+    setError(null)
+    try {
+      await asignarEtiquetaServidor(server.id, limpio)
+      setEtiquetas(await listarEtiquetasDeServidor(server.id))
+      setNuevaEtiqueta('')
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setGuardandoEtiqueta(false)
+    }
+  }
+
+  async function handleQuitarEtiqueta(etiquetaId: string) {
+    setGuardandoEtiqueta(true)
+    setError(null)
+    try {
+      await quitarEtiquetaServidor(server.id, etiquetaId)
+      setEtiquetas((prev) => prev.filter((e) => e.id !== etiquetaId))
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setGuardandoEtiqueta(false)
+    }
+  }
 
   const requisitos: Requisito[] = [
     {
@@ -156,6 +220,75 @@ export function ActivarComunidadSection({ server, canEdit, onUpdated }: ActivarC
               {guardandoDesc ? 'Guardando…' : 'Guardar descripción'}
             </Button>
           </div>
+        </div>
+      )}
+
+      {canEdit && server.communityEnabled && (
+        <div className="mt-6 flex flex-col gap-1.5">
+          <Label className="text-xs text-muted-foreground uppercase">
+            Etiquetas ({etiquetas.length}/{MAX_ETIQUETAS})
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Ayudan a que te encuentren en Explorar. Elegí una existente o escribí una nueva.
+          </p>
+
+          {etiquetas.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {etiquetas.map((etiqueta) => (
+                <Badge
+                  key={etiqueta.id}
+                  variant="secondary"
+                  className="cursor-pointer gap-1"
+                  onClick={() => handleQuitarEtiqueta(etiqueta.id)}
+                >
+                  {etiqueta.nombre}
+                  <X className="size-3" />
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          {etiquetas.length < MAX_ETIQUETAS && (
+            <>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={nuevaEtiqueta}
+                  maxLength={30}
+                  placeholder="Nueva etiqueta"
+                  onChange={(event) => setNuevaEtiqueta(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') handleAgregarEtiqueta(nuevaEtiqueta)
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!nuevaEtiqueta.trim() || guardandoEtiqueta}
+                  onClick={() => handleAgregarEtiqueta(nuevaEtiqueta)}
+                >
+                  Agregar
+                </Button>
+              </div>
+
+              {etiquetasSugeridas.filter((s) => !etiquetas.some((e) => e.id === s.id)).length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {etiquetasSugeridas
+                    .filter((s) => !etiquetas.some((e) => e.id === s.id))
+                    .slice(0, 12)
+                    .map((sugerida) => (
+                      <Badge
+                        key={sugerida.id}
+                        variant="outline"
+                        className="cursor-pointer"
+                        onClick={() => handleAgregarEtiqueta(sugerida.nombre)}
+                      >
+                        {sugerida.nombre}
+                      </Badge>
+                    ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 

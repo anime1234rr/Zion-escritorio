@@ -5,6 +5,8 @@ export type FontScale = 'sm' | 'md' | 'lg' | 'xl'
 export interface AccessibilitySettings {
   fontScale: FontScale
   reduceMotion: boolean
+  highContrast: boolean
+  underlineLinks: boolean
 }
 
 const STORAGE_KEY = 'zion:accessibility-settings'
@@ -13,6 +15,8 @@ const FONT_SCALES: FontScale[] = ['sm', 'md', 'lg', 'xl']
 const DEFAULTS: AccessibilitySettings = {
   fontScale: 'md',
   reduceMotion: false,
+  highContrast: false,
+  underlineLinks: false,
 }
 
 function readStored(): AccessibilitySettings {
@@ -26,6 +30,8 @@ function readStored(): AccessibilitySettings {
         ? parsed.fontScale
         : DEFAULTS.fontScale,
       reduceMotion: parsed.reduceMotion ?? DEFAULTS.reduceMotion,
+      highContrast: parsed.highContrast ?? DEFAULTS.highContrast,
+      underlineLinks: parsed.underlineLinks ?? DEFAULTS.underlineLinks,
     }
   } catch {
     return DEFAULTS
@@ -36,6 +42,8 @@ function applyToDocument(current: AccessibilitySettings): void {
   if (typeof document === 'undefined') return
   document.documentElement.dataset.fontScale = current.fontScale
   document.documentElement.dataset.reduceMotion = String(current.reduceMotion)
+  document.documentElement.dataset.highContrast = String(current.highContrast)
+  document.documentElement.dataset.underlineLinks = String(current.underlineLinks)
 }
 
 let settings: AccessibilitySettings = readStored()

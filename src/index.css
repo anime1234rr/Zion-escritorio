@@ -178,6 +178,22 @@ body,
   scroll-behavior: auto !important;
 }
 
+:root[data-high-contrast='true'] {
+  --border: rgba(255, 255, 255, 0.35);
+  --sidebar-border: rgba(255, 255, 255, 0.35);
+  --muted-foreground: #e5e7eb;
+}
+
+.light[data-high-contrast='true'] {
+  --border: oklch(0.55 0 0);
+  --sidebar-border: oklch(0.55 0 0);
+  --muted-foreground: oklch(0.32 0 0);
+}
+
+[data-underline-links='true'] .zion-link {
+  text-decoration: underline;
+}
+
 body {
   margin: 0;
   overscroll-behavior: none;

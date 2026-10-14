@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Compass, Search, Sparkles, Users } from 'lucide-react'
+import { Compass, Search, Sparkles, Users, X } from 'lucide-react'
 
-import { staffCambiarListadoServidor, staffListarServidores, type ServidorStaff } from '@/lib/staff-platform'
+import {
+  staffCambiarListadoServidor,
+  staffListarServidores,
+  staffQuitarEtiquetaServidor,
+  type ServidorStaff,
+} from '@/lib/staff-platform'
 import { debounce, initials, relativeTime } from '@/lib/internal/core-utils'
 import { suscribirseAlPanelStaff } from '@/lib/realtime-avisos'
 import { cn, getErrorMessage } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -47,6 +53,24 @@ export function ServidoresTab({ onCambio }: { onCambio: () => void }) {
         prev?.map((s) => (s.id === servidor.id ? { ...s, listadoPorStaff: listado } : s)) ?? prev
       )
       onCambio()
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function quitarEtiqueta(servidor: ServidorStaff, etiquetaId: string) {
+    setBusyId(servidor.id)
+    setError(null)
+    try {
+      await staffQuitarEtiquetaServidor(servidor.id, etiquetaId)
+      setServidores(
+        (prev) =>
+          prev?.map((s) =>
+            s.id === servidor.id ? { ...s, etiquetas: s.etiquetas.filter((e) => e.id !== etiquetaId) } : s
+          ) ?? prev
+      )
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {
@@ -148,6 +172,21 @@ export function ServidoresTab({ onCambio }: { onCambio: () => void }) {
                   ? ` · agregado por ${servidor.listadoPorNombre}`
                   : ''}
               </p>
+              {servidor.etiquetas.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {servidor.etiquetas.map((etiqueta) => (
+                    <Badge
+                      key={etiqueta.id}
+                      variant="outline"
+                      className={cn('cursor-pointer gap-1', busyId === servidor.id && 'pointer-events-none opacity-50')}
+                      onClick={() => quitarEtiqueta(servidor, etiqueta.id)}
+                    >
+                      {etiqueta.nombre}
+                      <X className="size-3" />
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
             {servidor.listadoPorStaff ? (
               <Button

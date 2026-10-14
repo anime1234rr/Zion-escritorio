@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Compass, Loader2, Search, Server, Telescope, Users } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Compass, Loader2, Search, Server, Telescope, TrendingUp, Users } from 'lucide-react'
 
-import { explorarComunidades, type CommunityListing } from '@/lib/explore'
+import {
+  explorarComunidades,
+  explorarComunidadesDestacadas,
+  listarEtiquetasPopulares,
+  type CommunityListing,
+  type EtiquetaPopular,
+  type PeriodoDestacado,
+} from '@/lib/explore'
 import { unirseAServidor } from '@/lib/servers'
 import { suscribirseAExplorar } from '@/lib/realtime-avisos'
 import type { ServerItem } from '@/lib/types'
@@ -22,75 +29,58 @@ interface VistaExplorarProps {
 
 type Modo = 'servidores' | 'personas'
 
-const CATEGORIAS: { id: string; label: string; palabras: string[] }[] = [
-  { id: 'todos', label: 'Todos', palabras: [] },
-  { id: 'anime', label: 'Anime', palabras: ['anime', 'manga', 'otaku', 'waifu', 'weeb', 'cosplay'] },
-  {
-    id: 'gaming',
-    label: 'Gaming',
-    palabras: [
-      'gaming', 'gamer', 'juego', 'videojuego', 'game', 'esport', 'fps', 'rpg',
-      'minecraft', 'valorant', 'league', 'fortnite', 'roblox', 'steam',
-    ],
-  },
-  {
-    id: 'tecnologia',
-    label: 'Tecnología',
-    palabras: [
-      'tech', 'tecnolog', 'program', 'desarroll', 'codigo', 'code', 'software',
-      'hardware', 'linux', 'javascript', 'python', 'inteligencia artificial', 'devops',
-    ],
-  },
-  {
-    id: 'musica',
-    label: 'Música',
-    palabras: ['music', 'musica', 'beat', 'productor', 'rap', 'rock', 'pop', 'trap', 'dj', 'banda'],
-  },
-  {
-    id: 'arte',
-    label: 'Arte',
-    palabras: ['arte', 'art', 'dibujo', 'draw', 'ilustra', 'diseno', 'design', 'pixel', 'nft'],
-  },
-  {
-    id: 'social',
-    label: 'Social',
-    palabras: ['comunidad', 'amigos', 'chat', 'social', 'hangout', 'charla', 'conocer'],
-  },
+const PERIODOS: { value: PeriodoDestacado; label: string }[] = [
+  { value: 'dia', label: 'Día' },
+  { value: 'semana', label: 'Semana' },
+  { value: 'mes', label: 'Mensual' },
+  { value: 'anio', label: 'Anual' },
 ]
-
-function normalizar(texto: string) {
-  return texto
-    .normalize('NFD')
-    .replace(new RegExp('[\\u0300-\\u036f]', 'g'), '')
-    .toLowerCase()
-}
-
-function coincideCategoria(comunidad: CommunityListing, categoriaId: string) {
-  const cat = CATEGORIAS.find((c) => c.id === categoriaId)
-  if (!cat || cat.palabras.length === 0) return true
-  const heno = normalizar(`${comunidad.name} ${comunidad.description ?? ''}`)
-  return cat.palabras.some((palabra) => heno.includes(normalizar(palabra)))
-}
 
 export function VistaExplorar({ currentUserId, onJoined, onOpenServer, onMessageUser }: VistaExplorarProps) {
   const [modo, setModo] = useState<Modo>('servidores')
   const [query, setQuery] = useState('')
   const [queryPersonas, setQueryPersonas] = useState('')
-  const [categoria, setCategoria] = useState('todos')
+  const [etiquetaSeleccionada, setEtiquetaSeleccionada] = useState<string | null>(null)
+  const [etiquetasDisponibles, setEtiquetasDisponibles] = useState<EtiquetaPopular[]>([])
   const [comunidades, setComunidades] = useState<CommunityListing[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uniendo, setUniendo] = useState<string | null>(null)
+  const [periodoDestacado, setPeriodoDestacado] = useState<PeriodoDestacado>('dia')
+  const [destacados, setDestacados] = useState<CommunityListing[]>([])
   const queryRef = useRef(query)
+  const etiquetaRef = useRef(etiquetaSeleccionada)
 
   useEffect(() => {
     queryRef.current = query
   }, [query])
 
+  useEffect(() => {
+    etiquetaRef.current = etiquetaSeleccionada
+  }, [etiquetaSeleccionada])
+
+  useEffect(() => {
+    listarEtiquetasPopulares(20)
+      .then(setEtiquetasDisponibles)
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    let cancelado = false
+    explorarComunidadesDestacadas(periodoDestacado, 10)
+      .then((data) => {
+        if (!cancelado) setDestacados(data)
+      })
+      .catch(() => {})
+    return () => {
+      cancelado = true
+    }
+  }, [periodoDestacado])
+
   useEffect(
     () =>
       suscribirseAExplorar(() => {
-        explorarComunidades(queryRef.current)
+        explorarComunidades(queryRef.current, { etiqueta: etiquetaRef.current })
           .then(setComunidades)
           .catch(() => {})
       }),
@@ -103,7 +93,7 @@ export function VistaExplorar({ currentUserId, onJoined, onOpenServer, onMessage
     const timeout = setTimeout(() => {
       setCargando(true)
       setError(null)
-      explorarComunidades(query)
+      explorarComunidades(query, { etiqueta: etiquetaSeleccionada })
         .then((data) => {
           if (!cancelado) setComunidades(data)
         })
@@ -119,18 +109,15 @@ export function VistaExplorar({ currentUserId, onJoined, onOpenServer, onMessage
       cancelado = true
       clearTimeout(timeout)
     }
-  }, [query])
+  }, [query, etiquetaSeleccionada])
 
-  const visibles = useMemo(
-    () => comunidades.filter((c) => coincideCategoria(c, categoria)),
-    [comunidades, categoria]
-  )
+  const visibles = comunidades
 
-  const hayFiltros = query.trim() !== '' || categoria !== 'todos'
+  const hayFiltros = query.trim() !== '' || etiquetaSeleccionada !== null
 
   function limpiarFiltros() {
     setQuery('')
-    setCategoria('todos')
+    setEtiquetaSeleccionada(null)
   }
 
   async function handleAccion(comunidad: CommunityListing) {
@@ -215,19 +202,31 @@ export function VistaExplorar({ currentUserId, onJoined, onOpenServer, onMessage
 
         {modo === 'servidores' && (
           <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-            {CATEGORIAS.map((cat) => (
+            <button
+              type="button"
+              onClick={() => setEtiquetaSeleccionada(null)}
+              className={cn(
+                'shrink-0 rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50',
+                etiquetaSeleccionada === null
+                  ? 'border-primary bg-primary/10 text-foreground'
+                  : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
+              )}
+            >
+              Todos
+            </button>
+            {etiquetasDisponibles.map((etiqueta) => (
               <button
-                key={cat.id}
+                key={etiqueta.id}
                 type="button"
-                onClick={() => setCategoria(cat.id)}
+                onClick={() => setEtiquetaSeleccionada(etiqueta.nombre)}
                 className={cn(
                   'shrink-0 rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50',
-                  categoria === cat.id
+                  etiquetaSeleccionada === etiqueta.nombre
                     ? 'border-primary bg-primary/10 text-foreground'
                     : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
               >
-                {cat.label}
+                {etiqueta.nombre}
               </button>
             ))}
           </div>
@@ -242,55 +241,95 @@ export function VistaExplorar({ currentUserId, onJoined, onOpenServer, onMessage
               currentUserId={currentUserId}
               onMessageUser={onMessageUser}
             />
-          ) : cargando ? (
-            <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              Buscando comunidades…
-            </div>
-          ) : error ? (
-            <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
-              <Compass className="size-8 text-muted-foreground/50" />
-              No se pudieron cargar las comunidades. Probá de nuevo en un momento.
-            </div>
-          ) : visibles.length === 0 ? (
-            <div className="mx-auto flex max-w-sm flex-col items-center gap-3 py-20 text-center">
-              <div className="flex size-16 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-                <Telescope className="size-8" />
-              </div>
-              {hayFiltros ? (
-                <>
-                  <p className="text-sm font-semibold text-foreground">Nada por acá todavía</p>
-                  <p className="text-xs text-muted-foreground">
-                    Ninguna comunidad coincide con tu búsqueda. Probá con otro tema o mirá otras
-                    categorías.
-                  </p>
-                  <Button type="button" variant="outline" size="sm" onClick={limpiarFiltros}>
-                    Limpiar filtros
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm font-semibold text-foreground">
-                    Todavía no hay comunidades públicas
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Cuando alguien active la comunidad de su servidor, va a aparecer acá. Podés crear
-                    el tuyo desde el botón «+» de la barra lateral.
-                  </p>
-                </>
-              )}
-            </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {visibles.map((comunidad) => (
-                <CommunityCard
-                  key={comunidad.id}
-                  community={comunidad}
-                  joining={uniendo === comunidad.id}
-                  onAction={() => handleAccion(comunidad)}
-                />
-              ))}
-            </div>
+            <>
+              {destacados.length > 0 && (
+                <div className="mb-6">
+                  <div className="mb-2 flex items-center gap-2">
+                    <TrendingUp className="size-4 text-primary" />
+                    <h2 className="text-sm font-semibold text-foreground">Destacado</h2>
+                  </div>
+                  <div className="mb-3 flex gap-1.5">
+                    {PERIODOS.map((periodo) => (
+                      <button
+                        key={periodo.value}
+                        type="button"
+                        onClick={() => setPeriodoDestacado(periodo.value)}
+                        className={cn(
+                          'shrink-0 rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50',
+                          periodoDestacado === periodo.value
+                            ? 'border-primary bg-primary/10 text-foreground'
+                            : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
+                        )}
+                      >
+                        {periodo.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+                    {destacados.map((comunidad) => (
+                      <div key={comunidad.id} className="w-56 shrink-0">
+                        <CommunityCard
+                          community={comunidad}
+                          joining={uniendo === comunidad.id}
+                          onAction={() => handleAccion(comunidad)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {cargando ? (
+                <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Buscando comunidades…
+                </div>
+              ) : error ? (
+                <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
+                  <Compass className="size-8 text-muted-foreground/50" />
+                  No se pudieron cargar las comunidades. Probá de nuevo en un momento.
+                </div>
+              ) : visibles.length === 0 ? (
+                <div className="mx-auto flex max-w-sm flex-col items-center gap-3 py-20 text-center">
+                  <div className="flex size-16 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+                    <Telescope className="size-8" />
+                  </div>
+                  {hayFiltros ? (
+                    <>
+                      <p className="text-sm font-semibold text-foreground">Nada por acá todavía</p>
+                      <p className="text-xs text-muted-foreground">
+                        Ninguna comunidad coincide con tu búsqueda. Probá con otro tema o mirá otras
+                        categorías.
+                      </p>
+                      <Button type="button" variant="outline" size="sm" onClick={limpiarFiltros}>
+                        Limpiar filtros
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-semibold text-foreground">
+                        Todavía no hay comunidades públicas
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Cuando alguien active la comunidad de su servidor, va a aparecer acá. Podés crear
+                        el tuyo desde el botón «+» de la barra lateral.
+                      </p>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {visibles.map((comunidad) => (
+                    <CommunityCard
+                      key={comunidad.id}
+                      community={comunidad}
+                      joining={uniendo === comunidad.id}
+                      onAction={() => handleAccion(comunidad)}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </ScrollArea>
